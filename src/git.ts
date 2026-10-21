@@ -110,22 +110,31 @@ export interface BranchInfo {
 }
 
 export async function branches(repo: string): Promise<BranchInfo[]> {
-  const out = await git(repo, ["branch", "--list", "--format=%(refname:short)%x1f%(HEAD)"]);
+  // NOTE: branch --format uses ref-filter syntax, which does NOT support %xNN
+  // escapes (unlike log --pretty=format:) — they are emitted literally and end
+  // up glued to branch names. %(HEAD) is always exactly one char ("*" for the
+  // checked-out branch, space otherwise), so parse from the right instead of
+  // splitting on a separator that never materializes.
+  const parse = (line: string): { name: string; current: boolean } => ({
+    name: line.slice(0, -2),
+    current: line.endsWith("*"),
+  });
+  const out = await git(repo, ["branch", "--list", "--format=%(refname:short) %(HEAD)"]);
   const locals: BranchInfo[] = out
     .split("\n")
     .filter(Boolean)
     .map((l) => {
-      const [name, head] = l.split("\x1f");
-      return { name, current: head === "*", remote: false };
+      const { name, current } = parse(l);
+      return { name, current, remote: false };
     });
   let remotes: BranchInfo[] = [];
   try {
-    const rout = await git(repo, ["branch", "-r", "--list", "--format=%(refname:short)%x1f%(HEAD)"]);
+    const rout = await git(repo, ["branch", "-r", "--list", "--format=%(refname:short) %(HEAD)"]);
     remotes = rout
       .split("\n")
-      .filter((l) => l && !l.includes("-\u003e")) // skip origin/HEAD symref
+      .filter((l) => l && !l.includes("->")) // skip origin/HEAD symref
       .map((l) => {
-        const [name] = l.split("\x1f");
+        const { name } = parse(l);
         return { name, current: false, remote: true };
       });
   } catch {

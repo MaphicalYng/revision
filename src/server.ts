@@ -64,7 +64,7 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
       res.end(JSON.stringify({ error: "unauthorized: pass the token via ?token= or Authorization: Bearer" }));
     } else {
       res.writeHead(401, { "Content-Type": "text/html; charset=utf-8", "WWW-Authenticate": "Bearer", ...SECURITY_HEADERS });
-      res.end('<!DOCTYPE html><html><head><meta charset="utf-8"><title>revision — unauthorized</title></head><body style="font-family:system-ui;background:#0c0e12;color:#e6e9ef;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="font-size:18px">401 — token required</h1><p style="color:#9aa3b2;font-size:13px">Start the server with <code>--token &lt;secret&gt;</code>, or reopen the URL printed in the terminal (it includes the token).</p></div></body></html>');
+      res.end('<!DOCTYPE html><html><head><meta charset="utf-8"><title>revision — unauthorized</title><style>body{font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#f6f8fa;color:#1f2328}p{color:#59636e;font-size:13px}code{background:#eceff3;padding:1px 6px;border-radius:5px}@media (prefers-color-scheme:dark){body{background:#0c0e12;color:#e6e9ef}p{color:#9aa3b2}code{background:#1b2029}}</style></head><body><div style="text-align:center"><h1 style="font-size:18px">401 — token required</h1><p>Start the server with <code>--token &lt;secret&gt;</code>, or reopen the URL printed in the terminal (it includes the token).</p></div></body></html>');
     }
   };
 

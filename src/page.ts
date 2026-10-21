@@ -1,7 +1,7 @@
 /**
  * The single-page UI: one self-contained HTML document with inline CSS and JS.
  * No build step, no static assets — the server renders this string as-is.
- * Visual reference: Linear / GitHub Dark — near-black warm background, hairline
+ * Visual reference: Linear / GitHub — hairline
  * borders, one cool accent, and diff rows that read like paper tape.
  */
 
@@ -11,7 +11,8 @@ export function renderPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light dark">
+<script>try{document.documentElement.setAttribute("data-theme",localStorage.getItem("revision-theme")==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
 <title>revision</title>
 <style>${CSS}</style>
 </head>
@@ -21,6 +22,7 @@ export function renderPage(): string {
   <select id="repoSel" class="sel" aria-label="repository"></select>
   <select id="branchSel" class="sel" aria-label="branch"></select>
   <div class="sp"></div>
+  <button id="themeBtn" class="ibtn" title="Toggle theme" aria-label="toggle theme"></button>
   <button id="refreshBtn" class="ibtn" title="Refresh" aria-label="refresh"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
 </header>
 <div class="body">
@@ -42,12 +44,36 @@ export function renderPage(): string {
 
 const CSS = `
 :root {
+  /* light theme (default). Palette follows GitHub Light. */
+  --bg: #ffffff;
+  --panel: #f6f8fa;
+  --panel-2: #eceff3;
+  --panel-3: #e2e7ed;
+  --border: #d1d9e0;
+  --border-soft: #e5e9ef;
+  --border-hover: #b9c2cc;
+  --text: #1f2328;
+  --text-2: #59636e;
+  --text-3: #8b949e;
+  --accent: #0969da;
+  --accent-dim: rgba(9, 105, 218, 0.10);
+  --add-bg: rgba(26, 127, 55, 0.10);
+  --add-num: #1a7f37;
+  --del-bg: rgba(207, 34, 46, 0.10);
+  --del-num: #cf222e;
+  --add-word: rgba(26, 127, 55, 0.30);
+  --del-word: rgba(207, 34, 46, 0.26);
+  --scrollbar: #cfd6de;
+}
+
+[data-theme="dark"] {
   --bg: #0c0e12;
   --panel: #12151b;
   --panel-2: #161a21;
   --panel-3: #1b2029;
   --border: #232833;
   --border-soft: #1b202a;
+  --border-hover: #2e3542;
   --text: #e6e9ef;
   --text-2: #9aa3b2;
   --text-3: #5d6472;
@@ -59,6 +85,7 @@ const CSS = `
   --del-num: #ff7b72;
   --add-word: rgba(63, 185, 80, 0.32);
   --del-word: rgba(248, 81, 73, 0.32);
+  --scrollbar: #262c38;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --top-h: 52px;
@@ -72,7 +99,7 @@ body {
   overflow: hidden;
 }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #262c38; border-radius: 6px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 6px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- top bar ---------- */
@@ -94,7 +121,7 @@ body {
   font: 500 13px var(--sans);
   max-width: 260px; cursor: pointer;
 }
-.sel:hover { border-color: #2e3542; }
+.sel:hover { border-color: var(--border-hover); }
 .sel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .sp { flex: 1; }
 .ibtn {
@@ -103,7 +130,7 @@ body {
   background: var(--panel-2); color: var(--text-2);
   border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
 }
-.ibtn:hover { color: var(--text); border-color: #2e3542; }
+.ibtn:hover { color: var(--text); border-color: var(--border-hover); }
 
 /* ---------- layout ---------- */
 .body { flex: 1; display: flex; min-height: 0; }
@@ -150,17 +177,18 @@ body {
 .more[disabled] { opacity: 0.5; cursor: default; }
 
 /* ---------- main pane ---------- */
-.main { flex: 1; min-width: 0; overflow-y: auto; background: var(--bg); }
-.empty { height: 100%; display: grid; place-items: center; color: var(--text-3); text-align: center; padding: 40px; }
+.main { flex: 1; min-width: 0; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; }
+.empty { flex: 1; min-height: 0; display: grid; place-items: center; color: var(--text-3); text-align: center; padding: 40px; }
 .empty .big { font-size: 46px; margin-bottom: 14px; opacity: 0.5; }
 .empty h2 { font-size: 15px; color: var(--text-2); margin-bottom: 6px; }
 .empty p { font-size: 13px; max-width: 420px; line-height: 1.6; }
 code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--text-2); }
 
-.detail { padding: 22px 26px 60px; max-width: 1500px; }
+.detail { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 18px; }
 .d-head { margin-bottom: 16px; }
 .d-subject { font-size: 20px; font-weight: 650; line-height: 1.3; word-break: break-word; }
-.d-body { margin-top: 10px; color: var(--text-2); font-size: 13px; white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--border); padding-left: 12px; }
+.d-head { flex: none; }
+.d-body { margin-top: 10px; max-height: 26vh; overflow-y: auto; color: var(--text-2); font-size: 13px; white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--border); padding-left: 12px; }
 .d-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
 .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--panel-3); color: var(--accent); display: grid; place-items: center; font: 700 10px var(--sans); flex: none; }
 .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font: 500 12px var(--sans); color: var(--text-2); }
@@ -168,7 +196,7 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .chip.add b { color: var(--add-num); }
 .chip.del b { color: var(--del-num); }
 .chip.sha-chip { font-family: var(--mono); font-size: 11.5px; cursor: pointer; }
-.chip.sha-chip:hover { border-color: #2e3542; color: var(--text); }
+.chip.sha-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .merge-note { margin-top: 10px; font-size: 12px; color: #d29922; background: rgba(210, 153, 34, 0.08); border: 1px solid rgba(210, 153, 34, 0.25); border-radius: 8px; padding: 7px 11px; display: inline-block; }
 
 /* ---------- file tabs ---------- */
@@ -199,6 +227,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 
 /* ---------- diff ---------- */
 .diffbox {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 0 0 10px 10px;
@@ -207,7 +237,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .diffpath { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font: 500 12.5px var(--mono); color: var(--text-2); }
 .diffpath .full { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .diffpath .ibtn { width: 26px; height: 26px; margin-left: auto; flex: none; }
-.diff-scroll { overflow: auto; max-height: calc(100vh - 330px); min-height: 200px; font: 12.5px/20px var(--mono); }
+.diffpath { flex: none; }
+.diff-scroll { flex: 1; min-height: 0; overflow: auto; font: 12.5px/20px var(--mono); }
 .diff { display: grid; grid-template-columns: 46px minmax(0, max-content) 46px minmax(0, max-content); width: max-content; min-width: 100%; }
 .hunk-head { grid-column: 1 / -1; background: var(--panel-2); color: var(--text-3); padding: 3px 12px; font-size: 11px; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); position: sticky; left: 0; }
 .no, .code { padding: 0 10px; white-space: pre; }
@@ -249,7 +280,9 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 @media (max-width: 900px) {
   .body { flex-direction: column; }
   .side { width: 100%; height: 240px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .detail { padding: 16px 14px 40px; }
+  .main { overflow-y: auto; }
+  .detail { display: block; padding: 16px 14px 40px; }
+  .diffbox { display: block; }
   .diff-scroll { max-height: none; }
   .code { min-width: 38ch; }
 }
@@ -258,6 +291,18 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 const JS = String.raw`
 "use strict";
 var $ = function (id) { return document.getElementById(id); };
+var ICON_SUN = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.6v1.7M8 12.7v1.7M1.6 8h1.7M12.7 8h1.7M3.5 3.5l1.2 1.2M11.3 11.3l1.2 1.2M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2"/></svg>';
+var ICON_MOON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg>';
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem("revision-theme", t); } catch (e) { /* storage unavailable */ }
+  var btn = $("themeBtn");
+  if (btn) btn.innerHTML = t === "dark" ? ICON_SUN : ICON_MOON;
+  btn.title = t === "dark" ? "Switch to light theme" : "Switch to dark theme";
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+}
 /* Access token: the server prints a URL of the form /?token=<secret> at startup.
    The page keeps it in the query string and forwards it as a Bearer header on
    every API call, so it never needs to live in sessionStorage or a cookie. */
@@ -597,6 +642,8 @@ function mainEmpty(big, title, bodyHtml) {
 }
 
 function bindChrome() {
+  applyTheme(document.documentElement.getAttribute("data-theme") || "light");
+  $("themeBtn").onclick = toggleTheme;
   $("repoSel").onchange = function () { openRepo(this.value, null, null); };
   $("branchSel").onchange = function () { loadCommits(0, null); };
   $("refreshBtn").onclick = function () {

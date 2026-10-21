@@ -1,0 +1,46 @@
+{
+  "name": "revision",
+  "version": "0.1.0",
+  "description": "Zero-dependency web UI for browsing local git repos: branches, commit history, and side-by-side diffs with aligned line numbers",
+  "type": "module",
+  "license": "MIT",
+  "author": "MaphicalYng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaphicalYng/revision.git"
+  },
+  "homepage": "https://github.com/MaphicalYng/revision#readme",
+  "bugs": {
+    "url": "https://github.com/MaphicalYng/revision/issues"
+  },
+  "bin": {
+    "revision": "bin/revision.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "demo": "node scripts/demo.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "git",
+    "diff",
+    "code-review",
+    "web-ui",
+    "commit-history",
+    "side-by-side-diff",
+    "cli"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

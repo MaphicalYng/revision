@@ -634,7 +634,8 @@ function renderCommits() {
       '<div class="c-meta"><span class="c-sha">&#9679;</span><span class="c-author">' + wn + " uncommitted file" + (wn === 1 ? "" : "s") + "</span></div></button>";
   }
   var items = state.commits.filter(function (c) {
-    return !q || (c.subject + " " + c.author + " " + c.shortSha).toLowerCase().indexOf(q) >= 0;
+    /* match subject, author, short SHA, and the full 40-char SHA (any prefix length) */
+    return !q || (c.subject + " " + c.author + " " + c.shortSha + " " + c.sha).toLowerCase().indexOf(q) >= 0;
   });
   $("commitList").innerHTML = workRow + items.map(function (c) {
     var on = state.commit && state.commit.sha === c.sha ? " on" : "";

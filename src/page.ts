@@ -218,14 +218,14 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .code { min-width: 46ch; border-left: 1px solid var(--border-soft); }
 .code.old { background: var(--bg); }
 .code.new { background: var(--bg); }
-.r-ctx .code { color: var(--text); }
-.r-add .no-n, .r-add .code.new { background: var(--add-bg); }
-.r-add .code.new { color: var(--add-num); }
-.r-del .no-o, .r-del .code.old { background: var(--del-bg); }
-.r-del .code.old { color: var(--del-num); }
-.r-pair .code.old { background: var(--del-bg); color: var(--del-num); }
-.r-pair .code.new { background: var(--add-bg); color: var(--add-num); }
-.r-gap .code { color: var(--text-3); font-style: italic; }
+.code.r-ctx { color: var(--text); }
+.no-n.r-add, .code.new.r-add { background: var(--add-bg); }
+.code.new.r-add { color: var(--add-num); }
+.no-o.r-del, .code.old.r-del { background: var(--del-bg); }
+.code.old.r-del { color: var(--del-num); }
+.code.old.r-pair { background: var(--del-bg); color: var(--del-num); }
+.code.new.r-pair { background: var(--add-bg); color: var(--add-num); }
+.code.r-gap { color: var(--text-3); font-style: italic; }
 mark.w-del { background: var(--del-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 .diff-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font: 13px var(--sans); }
@@ -551,10 +551,10 @@ function diffHtml(fd) {
         oldCell = r.oldText === null ? "" : esc(r.oldText);
         newCell = r.newText === null ? "" : esc(r.newText);
       }
-      html.push('<div class="no no-o">' + (r.oldNo == null ? "" : r.oldNo) + "</div>");
-      html.push('<div class="code old">' + oldCell + "</div>");
-      html.push('<div class="no no-n">' + (r.newNo == null ? "" : r.newNo) + "</div>");
-      html.push('<div class="code new">' + newCell + "</div>");
+      html.push('<div class="no no-o ' + cls + '">' + (r.oldNo == null ? "" : r.oldNo) + "</div>");
+      html.push('<div class="code old ' + cls + '">' + oldCell + "</div>");
+      html.push('<div class="no no-n ' + cls + '">' + (r.newNo == null ? "" : r.newNo) + "</div>");
+      html.push('<div class="code new ' + cls + '">' + newCell + "</div>");
     });
   });
   html.push("</div>");

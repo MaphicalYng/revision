@@ -80,6 +80,10 @@ const CSS = `
   --add-word: rgba(26, 127, 55, 0.30);
   --del-word: rgba(207, 34, 46, 0.26);
   --scrollbar: #cfd6de;
+  /* theme-independent */
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --top-h: 52px;
 }
 
 [data-theme="dark"] {
@@ -102,9 +106,6 @@ const CSS = `
   --add-word: rgba(63, 185, 80, 0.32);
   --del-word: rgba(248, 81, 73, 0.32);
   --scrollbar: #262c38;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --top-h: 52px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }

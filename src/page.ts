@@ -222,6 +222,7 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .st.M { color: var(--accent); background: var(--accent-dim); }
 .st.D { color: var(--del-num); background: var(--del-bg); }
 .st.R { color: #d2a8ff; background: rgba(210, 168, 255, 0.12); }
+.st.U { color: var(--text-3); background: var(--panel-3); }
 .ftab .fp { overflow: hidden; text-overflow: ellipsis; direction: rtl; }
 .ftab .cnt { font: 500 11px var(--mono); color: var(--text-3); }
 
@@ -310,7 +311,8 @@ var TOKEN = new URLSearchParams(location.search).get("token") || "";
 var state = {
   repos: [], repo: null, branches: [], branch: null,
   commits: [], hasMore: false, loading: false,
-  commit: null, files: [], fileSel: null, fileCache: {}, filter: ""
+  commit: null, files: [], fileSel: null, fileCache: {}, filter: "",
+  work: null, view: "commit"
 };
 
 function esc(s) {
@@ -392,7 +394,7 @@ async function boot() {
 }
 
 async function openRepo(id, branchWanted, commitWanted) {
-  state.repo = id; state.fileCache = {}; state.commits = []; state.commit = null; state.fileSel = null;
+  state.repo = id; state.fileCache = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit";
   writeHash();
   try {
     var b = await api("/api/repo/" + encodeURIComponent(id) + "/branches");
@@ -411,6 +413,7 @@ async function openRepo(id, branchWanted, commitWanted) {
     : (locals.find(function (x) { return x.current; }) || locals[0] || state.branches[0] || {}).name;
   bs.value = pick || "";
   await loadCommits(0, commitWanted);
+  loadWork();
 }
 
 async function loadCommits(skip, commitWanted) {
@@ -443,10 +446,17 @@ function removeGhost() { /* placeholder for future skeleton rows */ }
 
 function renderCommits() {
   var q = state.filter.trim().toLowerCase();
+  var workRow = "";
+  if (!q && state.work && state.work.files && state.work.files.length) {
+    var won = state.view === "work" ? " on" : "";
+    var wn = state.work.files.length;
+    workRow = '<button class="commit work' + won + '" data-work="1"><div class="c-subject">Working tree</div>' +
+      '<div class="c-meta"><span class="c-sha">&#9679;</span><span class="c-author">' + wn + " uncommitted file" + (wn === 1 ? "" : "s") + "</span></div></button>";
+  }
   var items = state.commits.filter(function (c) {
     return !q || (c.subject + " " + c.author + " " + c.shortSha).toLowerCase().indexOf(q) >= 0;
   });
-  $("commitList").innerHTML = items.map(function (c) {
+  $("commitList").innerHTML = workRow + items.map(function (c) {
     var on = state.commit && state.commit.sha === c.sha ? " on" : "";
     var mp = c.parents > 1 ? ' <span class="c-parents" title="merge commit">·merge</span>' : "";
     return '<button class="commit' + on + '" data-sha="' + esc(c.sha) + '">' +
@@ -459,7 +469,8 @@ function renderCommits() {
 
 async function selectCommit(sha) {
   if (!sha) return;
-  state.commit = null; state.files = []; state.fileSel = null;
+  state.view = "commit";
+  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {};
   renderCommits();
   var main = $("main");
   main.innerHTML = '<div class="empty"><div><div class="big">…</div><p>Loading commit…</p></div></div>';
@@ -476,6 +487,67 @@ async function selectCommit(sha) {
   writeHash();
   renderDetail();
   renderCommits();
+}
+
+async function loadWork() {
+  state.work = null;
+  if (!state.repo) return;
+  try {
+    state.work = await api("/api/repo/" + encodeURIComponent(state.repo) + "/work");
+  } catch (e) {
+    state.work = null;
+  }
+  renderCommits();
+}
+
+async function selectWork() {
+  if (!state.repo) return;
+  state.view = "work";
+  state.commit = null; state.fileCache = {}; state.files = []; state.fileSel = null;
+  renderCommits();
+  try {
+    if (!state.work) state.work = await api("/api/repo/" + encodeURIComponent(state.repo) + "/work");
+  } catch (e) {
+    mainEmpty("&#9888;&#65039;", "Failed to load working tree status", esc(e.message));
+    return;
+  }
+  var files = (state.work.files || []).map(function (f) {
+    var st = "modified";
+    if (f.untracked) st = "untracked";
+    else if (f.code.indexOf("D") !== -1) st = "deleted";
+    else if (f.code.indexOf("R") !== -1 || f.code.indexOf("C") !== -1) st = "renamed";
+    else if (f.code.indexOf("A") !== -1) st = "added";
+    return { path: f.path, oldPath: f.oldPath || undefined, status: st, binary: f.binary };
+  });
+  if (!files.length) { mainEmpty("&#10003;", "No uncommitted changes", "The working tree is clean."); return; }
+  state.files = files;
+  state.fileSel = files[0].path;
+  renderWorkDetail();
+  renderCommits();
+}
+
+function renderWorkDetail() {
+  var adds = 0, dels = 0, hasNums = false;
+  (state.work.files || []).forEach(function (f) {
+    if (f.additions != null) { adds += f.additions; hasNums = true; }
+    if (f.deletions != null) { dels += f.deletions; hasNums = true; }
+  });
+  var chips = '<span class="chip"><b>' + state.work.files.length + "</b> files</span>";
+  if (hasNums) chips += '<span class="chip add">+<b>' + adds + '</b></span><span class="chip del">&#8722;<b>' + dels + "</b></span>";
+  $("main").innerHTML =
+    '<div class="detail">' +
+    '<div class="d-head">' +
+    '<h1 class="d-subject">Uncommitted changes</h1>' +
+    '<div class="d-meta">' +
+    '<span class="avatar" title="working tree">WT</span>' +
+    "<span><b>working tree</b> &middot; vs HEAD &middot; " + esc(state.repo) + (state.branch ? " (" + esc(state.branch) + ")" : "") + "</span>" +
+    chips + "</div>" +
+    '<div class="merge-note">Staged and unstaged changes are shown combined, against HEAD. Untracked files appear as all-new lines.</div></div>' +
+    '<div class="ftabs" id="ftabs"></div>' +
+    '<div class="diffbox" id="diffbox"></div>' +
+    "</div>";
+  renderTabs();
+  renderDiff();
 }
 
 function renderDetail() {
@@ -510,7 +582,7 @@ function renderTabs() {
   var d = state.commit;
   el.innerHTML = state.files.map(function (f) {
     var on = f.path === state.fileSel ? " on" : "";
-    var st = f.status === "added" ? "A" : f.status === "deleted" ? "D" : f.status === "renamed" ? "R" : "M";
+    var st = f.status === "added" ? "A" : f.status === "deleted" ? "D" : f.status === "renamed" ? "R" : f.status === "untracked" ? "U" : "M";
     var label = f.status === "renamed" ? basename(f.oldPath) + " → " + basename(f.path) : basename(f.path);
     var cnt = "";
     var cached = state.fileCache[f.path];
@@ -550,7 +622,9 @@ async function renderDiff() {
   box.innerHTML = head + '<div class="diff-empty">Loading diff…</div>';
   var data;
   try {
-    var url = "/api/repo/" + encodeURIComponent(state.repo) + "/commit/" + encodeURIComponent(d.sha) + "/diff?file=" + encodeURIComponent(f.path);
+    var url = state.view === "work"
+      ? "/api/repo/" + encodeURIComponent(state.repo) + "/work/diff?file=" + encodeURIComponent(f.path)
+      : "/api/repo/" + encodeURIComponent(state.repo) + "/commit/" + encodeURIComponent(d.sha) + "/diff?file=" + encodeURIComponent(f.path);
     data = await api(url);
   } catch (e) {
     box.innerHTML = head + '<div class="diff-empty">Failed to load diff: ' + esc(e.message) + "</div>";
@@ -575,7 +649,7 @@ function diffHtml(fd) {
   }
   if (!fd.hunks || !fd.hunks.length) {
     if (fd.binary) return '<div class="binary-note">Binary file — diff not shown.</div>';
-    return '<div class="diff-empty">No textual changes (mode change only, or empty file).</div>';
+    return '<div class="diff-empty">No content changes (pure rename, mode change, or empty file).</div>';
   }
   var html = ['<div class="diff">'];
   fd.hunks.forEach(function (h) {
@@ -654,7 +728,9 @@ function bindChrome() {
   $("moreBtn").onclick = function () { loadCommits(state.commits.length, null); };
   $("commitList").onclick = function (e) {
     var btn = e.target.closest(".commit");
-    if (btn) selectCommit(btn.getAttribute("data-sha"));
+    if (!btn) return;
+    if (btn.getAttribute("data-work")) selectWork();
+    else selectCommit(btn.getAttribute("data-sha"));
   };
   document.addEventListener("keydown", function (e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;

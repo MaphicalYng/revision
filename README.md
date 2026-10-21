@@ -65,9 +65,10 @@ Every immediate subdirectory of `dir` that contains a `.git` entry shows up in t
 
 ## Features
 
-- **Repo discovery** — one level deep, worktrees and submodules included (`*.git` file or dir), name collisions suffixed, 100-repo cap
+- **Repo discovery** — one level deep, worktrees and submodules included (`*.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
 - **Branches** — local branches with the current one preselected; remote branches under an optgroup
 - **Commit history** — paged 100 at a time with "Load more", client-side filter box, merge-commit markers, relative timestamps
+- **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs, unborn-branch support
 - **Commit detail** — full message body, author, exact date, copyable SHA, aggregate `files changed / +ins / −del` stats
 - **File tabs** — `A`/`M`/`D`/`R` status chips, rename shown as `old → new`, per-file `+x −y` counts once loaded
 - **Side-by-side diff** — the old file on the left, the new file on the right, each with its own line numbers; deletion/addition runs pair row-by-row so both columns stay aligned; unpaired leftovers render with an empty opposite cell

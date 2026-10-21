@@ -19,6 +19,8 @@ import {
   log,
   commitDetail,
   fileDiff,
+  workStatus,
+  workDiffText,
   DIFF_CHAR_CAP,
 } from "./git.js";
 import { renderPage } from "./page.js";
@@ -179,6 +181,49 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         return;
       }
 
+      g = m(/^\/api\/repo\/([^/]+)\/work$/);
+      if (req.method === "GET" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        json(res, 200, await workStatus(rp));
+        return;
+      }
+      g = m(/^\/api\/repo\/([^/]+)\/work\/diff$/);
+      if (req.method === "GET" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const file = safeFile(url.searchParams.get("file") ?? "");
+        const st = await workStatus(rp);
+        const meta = st.files.find((f) => f.path === file);
+        if (!meta) throw new HttpError(`file not among working tree changes: ${file}`, 404);
+        if (meta.binary) {
+          json(res, 200, { file, binary: true, tooLarge: false, bytes: 0, counts: null, hunks: [] });
+          return;
+        }
+        let raw: string;
+        try {
+          raw = await workDiffText(rp, file, meta.untracked, st.hasHead, meta.oldPath);
+        } catch (e) {
+          raw = "";
+          if (!(e instanceof GitError)) throw e;
+        }
+        if (raw.length > DIFF_CHAR_CAP) {
+          json(res, 200, { file, binary: false, tooLarge: true, bytes: raw.length, counts: null, hunks: [] });
+          return;
+        }
+        const parsed = parseGitDiff(raw);
+        const fd = parsed.find((x) => (x.newPath ?? x.oldPath) === file) ?? parsed[0];
+        const hunks = fd ? fd.hunks.map((h) => ({ ...h, rows: toSideBySide([h]) })) : [];
+        json(res, 200, {
+          file,
+          binary: fd ? fd.binary : false,
+          tooLarge: false,
+          bytes: raw.length,
+          counts: fd ? countChanges(fd.hunks) : { additions: 0, deletions: 0 },
+          hunks,
+        });
+        return;
+      }
       g = m(/^\/api\/repo\/([^/]+)\/commit\/([0-9a-f]+)\/diff$/i);
       if (req.method === "GET" && g) {
         const rp = await repoPath(res, decodeURIComponent(g[1]));

@@ -24,7 +24,7 @@ const GIT_ENV = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
 function git(
   repo: string,
   args: string[],
-  opts: { maxBuffer?: number } = {},
+  opts: { maxBuffer?: number; okCodes?: number[] } = {},
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -33,8 +33,14 @@ function git(
       { env: GIT_ENV, maxBuffer: opts.maxBuffer ?? 32 * 1024 * 1024, timeout: 20_000 },
       (err, stdout, stderr) => {
         if (err) {
+          const code = (err as NodeJS.ErrnoException & { code?: number }).code ?? -1;
+          // e.g. `git diff --no-index` exits 1 when the inputs differ — a success for us.
+          if (opts.okCodes && opts.okCodes.includes(code)) {
+            resolve(stdout);
+            return;
+          }
           const tail = (stderr || String(err)).trim().split("\n").slice(-3).join(" ");
-          reject(new GitError(tail || "git command failed", (err as NodeJS.ErrnoException & { code?: number }).code ?? 1));
+          reject(new GitError(tail || "git command failed", code));
           return;
         }
         resolve(stdout);
@@ -290,4 +296,106 @@ export async function fileDiff(repo: string, sha: string, diffBase: string | nul
     ? ["diff", diffBase, sha, "--", filePath]
     : ["show", "--root", "--format=", "--patch", sha, "--", filePath];
   return git(repo, args, { maxBuffer: DIFF_CHAR_CAP + 1024 });
+}
+
+// ---------------------------------------------------- working tree ---
+
+export interface WorkFile {
+  path: string;
+  oldPath: string | null;
+  /** two-letter porcelain code, e.g. "M " (staged), " M" (unstaged), "MM", "??" */
+  code: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  binary: boolean;
+  additions: number | null;
+  deletions: number | null;
+}
+
+export async function hasHead(repo: string): Promise<boolean> {
+  try {
+    await git(repo, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Working tree status: staged + unstaged + untracked, rename-aware.
+ * adds/dels/binary come from `git diff HEAD --numstat` (staged-only on
+ * unborn branches); untracked files are not in numstat, so their counts
+ * stay null and they get an all-additions diff on demand instead.
+ */
+export async function workStatus(repo: string): Promise<{ hasHead: boolean; files: WorkFile[] }> {
+  const head = await hasHead(repo);
+  const out = await git(repo, ["status", "--porcelain=v1", "-z", "-M", "--untracked-files=normal"]);
+  const tok = out.split("\0").filter((t) => t.length > 0);
+  const files: WorkFile[] = [];
+  for (let i = 0; i < tok.length; i++) {
+    const code = tok[i].slice(0, 2);
+    const p = tok[i].slice(3);
+    let oldPath: string | null = null;
+    if (code[0] === "R" || code[0] === "C") {
+      oldPath = tok[i + 1] ?? null; // with -z the ORIGINAL path follows the new one
+      i++;
+    }
+    const untracked = code === "??";
+    files.push({
+      path: p,
+      oldPath,
+      code,
+      staged: !untracked && code[0] !== " ",
+      unstaged: !untracked && code[1] !== " ",
+      untracked,
+      binary: false,
+      additions: null,
+      deletions: null,
+    });
+  }
+  try {
+    const nsArgs = head
+      ? ["diff", "HEAD", "--numstat", "-M", "--"]
+      : ["diff", "--cached", "--numstat", "-M", "--"];
+    const ns = await git(repo, nsArgs);
+    const byPath = new Map<string, { a: number | null; d: number | null; binary: boolean }>();
+    for (const line of ns.split("\n")) {
+      if (!line) continue;
+      const parts = line.split("\t");
+      if (parts.length < 3) continue;
+      const a = parts[0] === "-" ? null : parseInt(parts[0], 10);
+      const d = parts[1] === "-" ? null : parseInt(parts[1], 10);
+      let p = parts.slice(2).join("\t");
+      const m = p.match(/^(.*) => (.*)$/); // non-z numstat renders renames as "old => new"
+      if (m) p = m[2];
+      byPath.set(p, { a, d, binary: a === null || d === null });
+    }
+    for (const f of files) {
+      const e = byPath.get(f.path);
+      if (e) {
+        f.additions = e.a;
+        f.deletions = e.d;
+        f.binary = e.binary;
+      }
+    }
+  } catch {
+    /* numstat is best-effort */
+  }
+  return { hasHead: head, files };
+}
+
+/**
+ * Raw unified diff for one working-tree file, vs HEAD (staged+unstaged combined).
+ * A rename needs BOTH paths in the pathspec — restricting to the new path makes
+ * git treat it as a pure addition (rename detection has nothing to pair with).
+ */
+export async function workDiffText(repo: string, file: string, untracked: boolean, head: boolean, oldPath?: string | null): Promise<string> {
+  if (untracked) {
+    // /dev/null vs file — git emits a standard "new file" patch; exit 1 just means "differences".
+    return git(repo, ["diff", "--no-index", "--", "/dev/null", file], { okCodes: [0, 1] });
+  }
+  const paths = oldPath ? [oldPath, file] : [file];
+  if (head) return git(repo, ["diff", "HEAD", "-M", "--", ...paths]);
+  return git(repo, ["diff", "--cached", "-M", "--", ...paths]);
 }

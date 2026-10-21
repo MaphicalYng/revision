@@ -566,7 +566,7 @@ async function boot() {
   repoDd.setItems(state.repos.map(function (r) { return { value: r.id, label: r.name, sub: r.path }; }));
   if (!state.repos.length) {
     repoDd.setValue("", "(no repos)");
-    mainEmpty("⎇", "No git repositories", 'No git repos found in the target directory. Start the server pointing at the directory that contains them: <code class="k">revision /path/to/parent</code>.');
+    mainEmpty("⎇", "No git repositories", 'No git repos found in the target directory. Start the server pointing at a repository itself (<code class="k">revision /path/to/repo</code>) or at the directory that contains them (<code class="k">revision /path/to/parent</code>).');
     return;
   }
   var h = readHash();

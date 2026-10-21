@@ -55,7 +55,7 @@ revision ~/code
 
 The page carries `?token=` in its URL and forwards it as an `Authorization: Bearer` header on every API call; API clients can pass either form. Without a valid token the server answers `401` for both the page and the API. Comparison is constant-time. Pass `--token <secret>` to choose your own (handy for bookmarks or multiple clients), or `--no-auth` only when the bind address is loopback / behind your own reverse-proxy auth.
 
-Every immediate subdirectory of `dir` that contains a `.git` entry shows up in the repo picker. Click a commit on the left, switch files along the top, read the diff.
+`dir` itself shows up when it is a git repository (so `revision ~/code/app` works), and so does every immediate subdirectory of `dir` that contains a `.git` entry. Click a commit on the left, switch files along the top, read the diff.
 
 ### Keyboard
 
@@ -65,7 +65,7 @@ Every immediate subdirectory of `dir` that contains a `.git` entry shows up in t
 
 ## Features
 
-- **Repo discovery** — one level deep, worktrees and submodules included (`*.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
+- **Repo discovery** — the target directory itself when it is a repo, plus one level deep, worktrees and submodules included (`*.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
 - **Branches** — local branches with the current one preselected; remote branches under an optgroup
 - **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking
 - **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type

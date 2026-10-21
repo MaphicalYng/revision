@@ -69,16 +69,34 @@ async function isGitRepo(dir: string): Promise<boolean> {
   }
 }
 
-/** Discover git repos one level below `root`. Cached briefly; collisions get a numeric suffix. */
+/** Branch + last commit of a repo; metadata is decorative, so failures fall back to nulls. */
+async function repoMeta(dir: string): Promise<{ branch: string | null; lastCommit: RepoInfo["lastCommit"] }> {
+  let branch: string | null = null;
+  let lastCommit: RepoInfo["lastCommit"] = null;
+  try {
+    branch = (await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+    if (branch === "HEAD") branch = null; // detached
+    const out = await git(dir, ["log", "-1", "--pretty=format:%H%x1f%an%x1f%aI%x1f%s"]);
+    if (out.trim()) {
+      const [sha, author, date, subject] = out.split("\x1f");
+      lastCommit = { sha, author, date, subject };
+    }
+  } catch {
+    // Unborn HEAD / corrupt repo: still list it, just without metadata.
+  }
+  return { branch, lastCommit };
+}
+
+/**
+ * Discover git repos: `root` itself when it is a repo, plus every repo one
+ * level below it (worktrees and submodules included). Cached briefly by the
+ * caller; name collisions get a numeric suffix, and the total is capped.
+ */
 export async function listRepos(root: string): Promise<RepoInfo[]> {
-  const entries = await fs.readdir(root, { withFileTypes: true });
-  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
   const found: RepoInfo[] = [];
   const seen = new Map<string, number>();
 
-  for (const name of dirs) {
-    const full = path.join(root, name);
-    if (!(await isGitRepo(full))) continue;
+  const add = async (dir: string, name: string): Promise<void> => {
     let id = name;
     const n = seen.get(name);
     if (n !== undefined) {
@@ -87,22 +105,24 @@ export async function listRepos(root: string): Promise<RepoInfo[]> {
     } else {
       seen.set(name, 1);
     }
+    found.push({ id, name, path: dir, ...(await repoMeta(dir)) });
+  };
 
-    let branch: string | null = null;
-    let lastCommit: RepoInfo["lastCommit"] = null;
-    try {
-      branch = (await git(full, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
-      if (branch === "HEAD") branch = null; // detached
-      const out = await git(full, ["log", "-1", "--pretty=format:%H%x1f%an%x1f%aI%x1f%s"]);
-      if (out.trim()) {
-        const [sha, author, date, subject] = out.split("\x1f");
-        lastCommit = { sha, author, date, subject };
-      }
-    } catch {
-      // Unborn HEAD / corrupt repo: still list it, just without metadata.
-    }
-    found.push({ id, name, path: full, branch, lastCommit });
+  // Pointing at the repo itself (e.g. `revision ~/code/app`) serves that repo.
+  if (await isGitRepo(root)) {
+    const resolved = path.resolve(root);
+    await add(root, path.basename(resolved) || path.parse(resolved).root);
+  }
+
+  if (found.length >= 100) return found;
+  const entries = await fs.readdir(root, { withFileTypes: true });
+  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+
+  for (const name of dirs) {
     if (found.length >= 100) break;
+    const full = path.join(root, name);
+    if (!(await isGitRepo(full))) continue;
+    await add(full, name);
   }
   return found;
 }

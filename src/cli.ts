@@ -66,7 +66,8 @@ Options
 
 Examples
   revision                     # serve repos under the current directory
-  revision ~/code --port 8080  # serve repos under ~/code on :8080
+  revision ~/code              # serve every repo under ~/code
+  revision ~/code/app          # serve that one repo
   revision ~/code --no-auth    # LAN-trusted environments only
 `;
 }
@@ -155,7 +156,7 @@ async function main(): Promise<void> {
   try {
     const { url } = await startServer({ root, host: opts.host, port: opts.port, token });
     const display = path.relative(process.cwd(), root) || ".";
-    const pageUrl = token ? url + "/?token=" + encodeURIComponent(token) : url + "/";
+    const pageUrl = token ? `${url}/?token=${encodeURIComponent(token)}` : `${url}/`;
     console.log(`revision ${version()}`);
     console.log(`  serving : ${display}`);
     console.log(`  listen  : ${pageUrl}`);

@@ -19,8 +19,20 @@ export function renderPage(): string {
 <body>
 <header class="top">
   <div class="brand"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.8"/><circle cx="4.5" cy="12.5" r="1.8"/><circle cx="11.5" cy="8" r="1.8"/><path d="M4.5 5.3v5.4M6 4.2l3.2 2.8M6 11.8l3.2-2.8"/></svg><span>revision</span></div>
-  <select id="repoSel" class="sel" aria-label="repository"></select>
-  <select id="branchSel" class="sel" aria-label="branch"></select>
+  <div class="dd" id="repoDd">
+    <button class="dd-btn" id="repoDdBtn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-text">Repository</span><svg class="dd-caret" viewBox="0 0 10 6" width="10" height="6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button>
+    <div class="dd-menu" id="repoDdMenu" hidden>
+      <input class="dd-search" id="repoDdSearch" type="search" placeholder="Filter repositories" autocomplete="off" spellcheck="false">
+      <div class="dd-list" id="repoDdList" role="listbox"></div>
+    </div>
+  </div>
+  <div class="dd" id="branchDd">
+    <button class="dd-btn" id="branchDdBtn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-text">Branch</span><svg class="dd-caret" viewBox="0 0 10 6" width="10" height="6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button>
+    <div class="dd-menu" id="branchDdMenu" hidden>
+      <input class="dd-search" id="branchDdSearch" type="search" placeholder="Filter branches" autocomplete="off" spellcheck="false">
+      <div class="dd-list" id="branchDdList" role="listbox"></div>
+    </div>
+  </div>
   <div class="sp"></div>
   <button id="themeBtn" class="ibtn" title="Toggle theme" aria-label="toggle theme"></button>
   <button id="refreshBtn" class="ibtn" title="Refresh" aria-label="refresh"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
@@ -116,17 +128,45 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: 0.2px; color: var(--text); margin-right: 6px; }
 .brand svg { color: var(--accent); }
-.sel {
-  appearance: none; -webkit-appearance: none;
-  background: var(--panel-2) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239aa3b2' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center;
-  color: var(--text);
+/* ---------- custom dropdown ---------- */
+.dd { position: relative; }
+.dd-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 10px; max-width: 220px;
+  background: var(--panel-2); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 30px 7px 11px;
-  font: 500 13px var(--sans);
-  max-width: 260px; cursor: pointer;
+  font: 500 12.5px var(--sans); cursor: pointer;
 }
-.sel:hover { border-color: var(--border-hover); }
-.sel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dd-btn:hover { border-color: var(--border-hover); }
+.dd-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-caret { color: var(--text-3); flex: none; transition: transform 0.15s ease; }
+.dd.open .dd-caret { transform: rotate(180deg); }
+.dd-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+  min-width: 100%; width: max-content; max-width: 360px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28); padding: 6px;
+  display: flex; flex-direction: column;
+}
+.dd-search {
+  height: 28px; padding: 0 9px; margin-bottom: 4px; flex: none;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font: 500 12.5px var(--sans); outline: none;
+}
+.dd-search:focus { border-color: var(--accent); }
+.dd-list { max-height: 300px; overflow-y: auto; }
+.dd-head { padding: 7px 9px 2px; font: 700 10px var(--sans); text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-3); }
+.dd-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 9px; border: 0; background: transparent; color: var(--text-2);
+  border-radius: 7px; cursor: pointer; font: 500 12.5px var(--sans);
+  text-align: left; white-space: nowrap;
+}
+.dd-item:hover, .dd-item.hi { background: var(--accent-dim); color: var(--text); }
+.dd-item.on { box-shadow: inset 2px 0 0 var(--accent); color: var(--text); }
+.dd-sub { margin-left: auto; padding-left: 16px; color: var(--text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.dd-empty { padding: 12px; color: var(--text-3); font-size: 12px; text-align: center; }
 .sp { flex: 1; }
 .ibtn {
   display: grid; place-items: center;
@@ -213,12 +253,20 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 /* ---------- file tree ---------- */
 .d-split { flex: 1; min-height: 0; display: flex; }
 .ftree {
-  width: 264px; flex: none; min-height: 0; overflow-y: auto;
+  width: 264px; flex: none; min-height: 0;
+  display: flex; flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border); border-right: 0;
   border-radius: 10px 0 0 10px;
   padding: 6px;
 }
+.ftree-search {
+  flex: none; height: 28px; padding: 0 8px; margin-bottom: 6px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font: 500 12px var(--sans); outline: none;
+}
+.ftree-search:focus { border-color: var(--accent); }
+.ftree-body { flex: 1; min-height: 0; overflow-y: auto; }
 .t-row {
   display: flex; align-items: center; gap: 7px; width: 100%;
   text-align: left; background: transparent; color: var(--text-2);
@@ -334,11 +382,114 @@ function toggleSide() {
    The page keeps it in the query string and forwards it as a Bearer header on
    every API call, so it never needs to live in sessionStorage or a cookie. */
 var TOKEN = new URLSearchParams(location.search).get("token") || "";
+/* ---------------- custom dropdown ---------------- */
+var ddClosers = [];
+function closeAllDd() { ddClosers.forEach(function (fn) { fn(); }); }
+
+function createDropdown(rootId, opts) {
+  var root = $(rootId);
+  var btn = root.querySelector(".dd-btn");
+  var menu = root.querySelector(".dd-menu");
+  var search = root.querySelector(".dd-search");
+  var list = root.querySelector(".dd-list");
+  var text = root.querySelector(".dd-text");
+  var items = [], filtered = [], hi = -1, current = null;
+
+  function scrollHi() {
+    var el = list.querySelector(".dd-item.hi");
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }
+  function renderList() {
+    if (!filtered.length) { list.innerHTML = '<div class="dd-empty">No matches</div>'; return; }
+    var lastGroup = null;
+    list.innerHTML = filtered.map(function (it, i) {
+      var head = "";
+      if (it.group && it.group !== lastGroup) { head = '<div class="dd-head">' + esc(it.group) + "</div>"; lastGroup = it.group; }
+      var cls = "dd-item" + (current != null && it.value === current ? " on" : "") + (i === hi ? " hi" : "");
+      var sub = it.sub ? '<span class="dd-sub">' + esc(it.sub) + "</span>" : "";
+      return head + '<button type="button" class="' + cls + '" data-i="' + i + '" role="option">' + esc(it.label) + sub + "</button>";
+    }).join("");
+  }
+  function applyFilter() {
+    var q = search.value.trim().toLowerCase();
+    filtered = !q ? items.slice() : items.filter(function (it) {
+      return it.label.toLowerCase().indexOf(q) >= 0 || (it.sub || "").toLowerCase().indexOf(q) >= 0 || (it.group || "").toLowerCase().indexOf(q) >= 0;
+    });
+    hi = filtered.length ? 0 : -1;
+    renderList();
+  }
+  function openMenu() {
+    closeAllDd();
+    menu.hidden = false;
+    root.classList.add("open");
+    btn.setAttribute("aria-expanded", "true");
+    search.value = "";
+    applyFilter();
+    setTimeout(function () { search.focus(); }, 0);
+  }
+  function closeMenu() {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    root.classList.remove("open");
+    btn.setAttribute("aria-expanded", "false");
+  }
+  function pick(it) {
+    if (!it) return;
+    current = it.value;
+    text.textContent = it.label;
+    closeMenu();
+    if (opts.onPick) opts.onPick(it.value, it);
+  }
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (menu.hidden) openMenu(); else closeMenu();
+  });
+  btn.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { closeMenu(); e.preventDefault(); }
+    else if (menu.hidden && (e.key === "ArrowDown" || e.key === "Enter")) { openMenu(); e.preventDefault(); }
+  });
+  search.addEventListener("input", applyFilter);
+  search.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { hi = Math.min(hi + 1, filtered.length - 1); renderList(); scrollHi(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { hi = Math.max(hi - 1, 0); renderList(); scrollHi(); e.preventDefault(); }
+    else if (e.key === "Enter") { pick(filtered[hi]); e.preventDefault(); }
+    else if (e.key === "Escape") { closeMenu(); btn.focus(); e.preventDefault(); }
+  });
+  list.addEventListener("click", function (e) {
+    var b = e.target.closest(".dd-item");
+    if (!b) return;
+    pick(filtered[parseInt(b.getAttribute("data-i"), 10)]);
+  });
+  list.addEventListener("mousemove", function (e) {
+    var b = e.target.closest(".dd-item");
+    if (!b) return;
+    var i = parseInt(b.getAttribute("data-i"), 10);
+    if (i !== hi) { hi = i; renderList(); }
+  });
+  document.addEventListener("click", function (e) {
+    if (!root.contains(e.target)) closeMenu();
+  });
+  ddClosers.push(closeMenu);
+  return {
+    setItems: function (arr) { items = arr.slice(); },
+    setValue: function (v, labelText) { current = v; text.textContent = labelText != null ? labelText : v; },
+    getValue: function () { return current; },
+    close: closeMenu
+  };
+}
+
+var repoDd = createDropdown("repoDd", {
+  onPick: function (v) { openRepo(v, null, null); }
+});
+var branchDd = createDropdown("branchDd", {
+  onPick: function (v) { state.branch = v; loadCommits(0, null); loadWork(); }
+});
+
 var state = {
   repos: [], repo: null, branches: [], branch: null,
   commits: [], hasMore: false, loading: false,
   commit: null, files: [], fileSel: null, fileCache: {}, filter: "",
-  work: null, view: "commit", treeOpen: {}
+  work: null, view: "commit", treeOpen: {}, fileQuery: ""
 };
 
 function esc(s) {
@@ -405,17 +556,15 @@ async function boot() {
     if (e.message !== "unauthorized") mainEmpty("⚠️", "Failed to scan repositories", esc(e.message));
     return;
   }
-  var sel = $("repoSel");
-  sel.innerHTML = state.repos.length
-    ? state.repos.map(function (r) { return '<option value="' + esc(r.id) + '">' + esc(r.name) + "</option>"; }).join("")
-    : '<option value="">(no repos found)</option>';
+  repoDd.setItems(state.repos.map(function (r) { return { value: r.id, label: r.name, sub: r.path }; }));
   if (!state.repos.length) {
+    repoDd.setValue("", "(no repos)");
     mainEmpty("⎇", "No git repositories", 'No git repos found in the target directory. Start the server pointing at the directory that contains them: <code class="k">revision /path/to/parent</code>.');
     return;
   }
   var h = readHash();
   var start = state.repos.find(function (r) { return r.id === h.r; }) || state.repos[0];
-  sel.value = start.id;
+  repoDd.setValue(start.id, start.name);
   await openRepo(start.id, h.b || null, h.c || null);
 }
 
@@ -426,25 +575,23 @@ async function openRepo(id, branchWanted, commitWanted) {
     var b = await api("/api/repo/" + encodeURIComponent(id) + "/branches");
     state.branches = b.branches;
   } catch (e) { toast(e.message); state.branches = []; }
-  var bs = $("branchSel");
   var locals = state.branches.filter(function (x) { return !x.remote; });
   var remotes = state.branches.filter(function (x) { return x.remote; });
-  var html = "";
-  if (locals.length) html += '<optgroup label="Local">' + locals.map(o).join("") + "</optgroup>";
-  if (remotes.length) html += '<optgroup label="Remote">' + remotes.map(o).join("") + "</optgroup>";
-  bs.innerHTML = html || '<option value="">(no branches)</option>';
-  function o(x) { return '<option value="' + esc(x.name) + '"' + (x.current ? " selected" : "") + ">" + esc(x.name) + "</option>"; }
+  var bitems = [];
+  locals.forEach(function (x) { bitems.push({ value: x.name, label: x.name, group: "Local" }); });
+  remotes.forEach(function (x) { bitems.push({ value: x.name, label: x.name, group: "Remote" }); });
+  branchDd.setItems(bitems);
   var pick = branchWanted && state.branches.some(function (x) { return x.name === branchWanted; })
     ? branchWanted
     : (locals.find(function (x) { return x.current; }) || locals[0] || state.branches[0] || {}).name;
-  bs.value = pick || "";
+  state.branch = pick || null;
+  branchDd.setValue(pick || "", pick || "(no branches)");
   await loadCommits(0, commitWanted);
   loadWork();
 }
 
 async function loadCommits(skip, commitWanted) {
   if (state.loading) return; state.loading = true;
-  state.branch = $("branchSel").value || null;
   writeHash();
   var list = $("commitList");
   if (skip === 0) { state.commits = []; list.innerHTML = '<div class="diff-empty">Loading…</div>'; }
@@ -496,7 +643,7 @@ function renderCommits() {
 async function selectCommit(sha) {
   if (!sha) return;
   state.view = "commit";
-  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {}; state.treeOpen = {};
+  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {}; state.treeOpen = {}; state.fileQuery = "";
   renderCommits();
   var main = $("main");
   main.innerHTML = '<div class="empty"><div><div class="big">…</div><p>Loading commit…</p></div></div>';
@@ -529,7 +676,7 @@ async function loadWork() {
 async function selectWork() {
   if (!state.repo) return;
   state.view = "work";
-  state.commit = null; state.fileCache = {}; state.files = []; state.fileSel = null; state.treeOpen = {};
+  state.commit = null; state.fileCache = {}; state.files = []; state.fileSel = null; state.treeOpen = {}; state.fileQuery = "";
   renderCommits();
   try {
     if (!state.work) state.work = await api("/api/repo/" + encodeURIComponent(state.repo) + "/work");
@@ -570,7 +717,10 @@ function renderWorkDetail() {
     chips + "</div>" +
     '<div class="merge-note">Staged and unstaged changes are shown combined, against HEAD. Untracked files appear as all-new lines.</div></div>' +
     '<div class="d-split">' +
-    '<div class="ftree" id="ftree"></div>' +
+    '<div class="ftree" id="ftree">' +
+    '<input id="fileFilter" class="ftree-search" type="search" placeholder="Filter files" autocomplete="off" spellcheck="false">' +
+    '<div class="ftree-body" id="ftreeBody"></div>' +
+    "</div>" +
     '<div class="diffbox" id="diffbox"></div>' +
     "</div>" +
     "</div>";
@@ -597,7 +747,10 @@ function renderDetail() {
     '<span class="chip sha-chip" id="shaChip" title="click to copy">' + esc(d.shortSha) + "</span>" +
     chips + "</div>" + mergeNote + "</div>" +
     '<div class="d-split">' +
-    '<div class="ftree" id="ftree"></div>' +
+    '<div class="ftree" id="ftree">' +
+    '<input id="fileFilter" class="ftree-search" type="search" placeholder="Filter files" autocomplete="off" spellcheck="false">' +
+    '<div class="ftree-body" id="ftreeBody"></div>' +
+    "</div>" +
     '<div class="diffbox" id="diffbox"></div>' +
     "</div>" +
     "</div>";
@@ -614,9 +767,26 @@ function fileCounts(f) {
 }
 
 function renderTree() {
-  var el = $("ftree");
+  var el = $("ftreeBody");
   if (!el) return;
   if (!state.files.length) { el.innerHTML = '<div class="diff-empty">No files changed.</div>'; return; }
+
+  /* filter mode: flattened full-path list of matches */
+  var q = (state.fileQuery || "").trim().toLowerCase();
+  if (q) {
+    var matches = state.files.filter(function (f) { return f.path.toLowerCase().indexOf(q) >= 0; });
+    el.innerHTML = matches.length ? matches.map(function (f) {
+      var c = fileCounts(f);
+      var on = f.path === state.fileSel ? " on" : "";
+      var tip = f.status === "renamed" ? f.oldPath + " → " + f.path : f.path;
+      return '<button class="t-row t-file' + on + '" data-path="' + esc(f.path) + '" title="' + esc(tip) + '">' +
+        '<span class="st ' + badge(f) + '">' + badge(f) + '</span><span class="t-name">' + esc(f.path) + "</span>" + (c ? cntHtml(c) : "") + "</button>";
+    }).join("") : '<div class="diff-empty">No files match.</div>';
+    Array.prototype.forEach.call(el.querySelectorAll(".t-file"), function (b) {
+      b.onclick = function () { state.fileSel = b.getAttribute("data-path"); renderTree(); renderDiff(); };
+    });
+    return;
+  }
 
   var root = { dirs: {}, files: [], path: "" };
   state.files.forEach(function (f) {
@@ -818,8 +988,9 @@ function bindChrome() {
   $("themeBtn").onclick = toggleTheme;
   $("collapseSide").onclick = toggleSide;
   $("expandSide").onclick = toggleSide;
-  $("repoSel").onchange = function () { openRepo(this.value, null, null); };
-  $("branchSel").onchange = function () { loadCommits(0, null); };
+  $("main").addEventListener("input", function (e) {
+    if (e.target && e.target.id === "fileFilter") { state.fileQuery = e.target.value; renderTree(); }
+  });
   $("refreshBtn").onclick = function () {
     if (state.repo) openRepo(state.repo, state.branch, state.commit ? state.commit.sha : null);
     else boot();
@@ -851,7 +1022,7 @@ function bindChrome() {
     var h = readHash();
     if (h.r && h.r !== state.repo) {
       var r = state.repos.find(function (x) { return x.id === h.r; });
-      if (r) { $("repoSel").value = r.id; openRepo(r.id, h.b, h.c); }
+      if (r) { repoDd.setValue(r.id, r.name); openRepo(r.id, h.b, h.c); }
     } else if (h.c && (!state.commit || h.c !== state.commit.sha)) {
       if (state.commits.some(function (c) { return c.sha === h.c; })) selectCommit(h.c);
     }

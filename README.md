@@ -67,6 +67,8 @@ Every immediate subdirectory of `dir` that contains a `.git` entry shows up in t
 
 - **Repo discovery** — one level deep, worktrees and submodules included (`*.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
 - **Branches** — local branches with the current one preselected; remote branches under an optgroup
+- **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking
+- **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type
 - **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", client-side filter box, merge-commit markers, relative timestamps
 - **File tree** — changed files rendered as an expandable directory tree beside the diff (not a tab strip), with per-file and per-directory `+x −y` counts and `A`/`M`/`D`/`R` status badges; the chain to the selected file auto-expands, everything else starts collapsed
 - **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs, unborn-branch support

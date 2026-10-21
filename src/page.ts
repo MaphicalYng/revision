@@ -12,7 +12,7 @@ export function renderPage(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<script>try{document.documentElement.setAttribute("data-theme",localStorage.getItem("revision-theme")==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<script>try{var d=document.documentElement;d.setAttribute("data-theme",localStorage.getItem("revision-theme")==="dark"?"dark":"light");d.classList.toggle("side-collapsed",localStorage.getItem("revision-side")==="collapsed")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
 <title>revision</title>
 <style>${CSS}</style>
 </head>
@@ -28,12 +28,16 @@ export function renderPage(): string {
 <div class="body">
   <aside class="side">
     <div class="side-head">
-      <span id="sideTitle">Commits</span>
+      <div class="side-head-row"><span id="sideTitle">Commits</span><button class="ibtn sm" id="collapseSide" title="Hide commit list" aria-label="hide commit list"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5"/></svg></button></div>
       <input id="filter" type="search" placeholder="Filter loaded commits" autocomplete="off" spellcheck="false">
     </div>
     <div id="commitList" class="commits"></div>
     <button id="moreBtn" class="more" hidden>Load more</button>
   </aside>
+  <div class="rail" id="rail">
+    <button class="ibtn" id="expandSide" title="Show commit list" aria-label="show commit list"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5"/></svg></button>
+    <span class="rail-label">Commits</span>
+  </div>
   <main class="main" id="main"></main>
 </div>
 <div class="toast" id="toast" role="status"></div>
@@ -151,6 +155,13 @@ body {
 }
 #filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 #filter::placeholder { color: var(--text-3); }
+.side-head-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.side-head-row span { margin-bottom: 0; }
+.ibtn.sm { width: 24px; height: 24px; border-radius: 6px; }
+.rail { display: none; width: 42px; flex: none; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0; background: var(--panel); border-right: 1px solid var(--border); }
+html.side-collapsed .rail { display: flex; }
+html.side-collapsed .side { display: none; }
+.rail-label { writing-mode: vertical-rl; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); }
 .commits { flex: 1; overflow-y: auto; padding: 6px; }
 .commit {
   display: block; width: 100%; text-align: left;
@@ -199,32 +210,37 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .chip.sha-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .merge-note { margin-top: 10px; font-size: 12px; color: #d29922; background: rgba(210, 153, 34, 0.08); border: 1px solid rgba(210, 153, 34, 0.25); border-radius: 8px; padding: 7px 11px; display: inline-block; }
 
-/* ---------- file tabs ---------- */
-.ftabs {
-  display: flex; gap: 4px; overflow-x: auto;
-  padding: 6px; margin: 14px 0 0;
+/* ---------- file tree ---------- */
+.d-split { flex: 1; min-height: 0; display: flex; }
+.ftree {
+  width: 264px; flex: none; min-height: 0; overflow-y: auto;
   background: var(--panel);
-  border: 1px solid var(--border); border-bottom: 0;
-  border-radius: 10px 10px 0 0;
+  border: 1px solid var(--border); border-right: 0;
+  border-radius: 10px 0 0 10px;
+  padding: 6px;
 }
-.ftab {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: transparent; color: var(--text-2);
-  border: 0; border-radius: 7px;
-  padding: 6px 10px; cursor: pointer;
-  font: 500 12.5px var(--sans);
-  white-space: nowrap; max-width: 300px;
+.t-row {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  text-align: left; background: transparent; color: var(--text-2);
+  border: 0; border-radius: 7px; padding: 4px 8px; cursor: pointer;
+  font: 500 12.5px var(--sans); white-space: nowrap; min-width: 0;
 }
-.ftab:hover { background: var(--panel-2); color: var(--text); }
-.ftab.on { background: var(--panel-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
-.ftab .st { font: 700 10px var(--mono); width: 15px; height: 15px; border-radius: 4px; display: grid; place-items: center; flex: none; }
+.t-row:hover { background: var(--panel-2); color: var(--text); }
+.t-file.on { background: var(--accent-dim); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+.t-dir { color: var(--text); font-weight: 600; }
+.tw { display: grid; place-items: center; width: 12px; flex: none; color: var(--text-3); transition: transform 0.12s ease; }
+.tw svg { display: block; }
+.t-dir.open .tw { transform: rotate(90deg); }
+.t-name { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
+.t-cnt { margin-left: auto; font: 500 11px var(--mono); color: var(--text-3); flex: none; }
+.t-cnt .ca { color: var(--add-num); }
+.t-cnt .cd { color: var(--del-num); }
+.st { font: 700 10px var(--mono); width: 15px; height: 15px; border-radius: 4px; display: inline-grid; place-items: center; flex: none; }
 .st.A { color: var(--add-num); background: var(--add-bg); }
 .st.M { color: var(--accent); background: var(--accent-dim); }
 .st.D { color: var(--del-num); background: var(--del-bg); }
 .st.R { color: #d2a8ff; background: rgba(210, 168, 255, 0.12); }
 .st.U { color: var(--text-3); background: var(--panel-3); }
-.ftab .fp { overflow: hidden; text-overflow: ellipsis; direction: rtl; }
-.ftab .cnt { font: 500 11px var(--mono); color: var(--text-3); }
 
 /* ---------- diff ---------- */
 .diffbox {
@@ -232,7 +248,7 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
   display: flex; flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 0 0 10px 10px;
+  border-radius: 0 10px 10px 0;
   overflow: hidden;
 }
 .diffpath { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font: 500 12.5px var(--mono); color: var(--text-2); }
@@ -286,6 +302,11 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   .diffbox { display: block; }
   .diff-scroll { max-height: none; }
   .code { min-width: 38ch; }
+  .d-split { flex-direction: column; }
+  .ftree { width: 100%; max-height: 220px; border-right: 1px solid var(--border); border-bottom: 0; border-radius: 10px 10px 0 0; }
+  .diffbox { border-radius: 0 0 10px 10px; }
+  html.side-collapsed .side { display: flex; }
+  html.side-collapsed .rail { display: none; }
 }
 `;
 
@@ -304,6 +325,11 @@ function applyTheme(t) {
 function toggleTheme() {
   applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
 }
+function toggleSide() {
+  var c = !document.documentElement.classList.contains("side-collapsed");
+  document.documentElement.classList.toggle("side-collapsed", c);
+  try { localStorage.setItem("revision-side", c ? "collapsed" : "open"); } catch (e) { /* storage unavailable */ }
+}
 /* Access token: the server prints a URL of the form /?token=<secret> at startup.
    The page keeps it in the query string and forwards it as a Bearer header on
    every API call, so it never needs to live in sessionStorage or a cookie. */
@@ -312,7 +338,7 @@ var state = {
   repos: [], repo: null, branches: [], branch: null,
   commits: [], hasMore: false, loading: false,
   commit: null, files: [], fileSel: null, fileCache: {}, filter: "",
-  work: null, view: "commit"
+  work: null, view: "commit", treeOpen: {}
 };
 
 function esc(s) {
@@ -394,7 +420,7 @@ async function boot() {
 }
 
 async function openRepo(id, branchWanted, commitWanted) {
-  state.repo = id; state.fileCache = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit";
+  state.repo = id; state.fileCache = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit"; state.treeOpen = {};
   writeHash();
   try {
     var b = await api("/api/repo/" + encodeURIComponent(id) + "/branches");
@@ -470,7 +496,7 @@ function renderCommits() {
 async function selectCommit(sha) {
   if (!sha) return;
   state.view = "commit";
-  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {};
+  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {}; state.treeOpen = {};
   renderCommits();
   var main = $("main");
   main.innerHTML = '<div class="empty"><div><div class="big">…</div><p>Loading commit…</p></div></div>';
@@ -503,7 +529,7 @@ async function loadWork() {
 async function selectWork() {
   if (!state.repo) return;
   state.view = "work";
-  state.commit = null; state.fileCache = {}; state.files = []; state.fileSel = null;
+  state.commit = null; state.fileCache = {}; state.files = []; state.fileSel = null; state.treeOpen = {};
   renderCommits();
   try {
     if (!state.work) state.work = await api("/api/repo/" + encodeURIComponent(state.repo) + "/work");
@@ -517,7 +543,7 @@ async function selectWork() {
     else if (f.code.indexOf("D") !== -1) st = "deleted";
     else if (f.code.indexOf("R") !== -1 || f.code.indexOf("C") !== -1) st = "renamed";
     else if (f.code.indexOf("A") !== -1) st = "added";
-    return { path: f.path, oldPath: f.oldPath || undefined, status: st, binary: f.binary };
+    return { path: f.path, oldPath: f.oldPath || undefined, status: st, binary: f.binary, additions: f.additions, deletions: f.deletions };
   });
   if (!files.length) { mainEmpty("&#10003;", "No uncommitted changes", "The working tree is clean."); return; }
   state.files = files;
@@ -543,10 +569,12 @@ function renderWorkDetail() {
     "<span><b>working tree</b> &middot; vs HEAD &middot; " + esc(state.repo) + (state.branch ? " (" + esc(state.branch) + ")" : "") + "</span>" +
     chips + "</div>" +
     '<div class="merge-note">Staged and unstaged changes are shown combined, against HEAD. Untracked files appear as all-new lines.</div></div>' +
-    '<div class="ftabs" id="ftabs"></div>' +
+    '<div class="d-split">' +
+    '<div class="ftree" id="ftree"></div>' +
     '<div class="diffbox" id="diffbox"></div>' +
+    "</div>" +
     "</div>";
-  renderTabs();
+  renderTree();
   renderDiff();
 }
 
@@ -568,31 +596,101 @@ function renderDetail() {
     "<span><b>" + esc(d.author) + "</b> · " + esc(fullTime(d.date)) + "</span>" +
     '<span class="chip sha-chip" id="shaChip" title="click to copy">' + esc(d.shortSha) + "</span>" +
     chips + "</div>" + mergeNote + "</div>" +
-    '<div class="ftabs" id="ftabs"></div>' +
+    '<div class="d-split">' +
+    '<div class="ftree" id="ftree"></div>' +
     '<div class="diffbox" id="diffbox"></div>' +
+    "</div>" +
     "</div>";
   $("shaChip").onclick = function () { copyText(d.sha, "Commit SHA copied"); };
-  renderTabs();
+  renderTree();
   renderDiff();
 }
 
-function renderTabs() {
-  var el = $("ftabs");
+function fileCounts(f) {
+  if (typeof f.additions === "number" && typeof f.deletions === "number") return { a: f.additions, d: f.deletions };
+  var cached = state.fileCache[f.path];
+  if (cached && cached.counts) return { a: cached.counts.additions, d: cached.counts.deletions };
+  return null;
+}
+
+function renderTree() {
+  var el = $("ftree");
   if (!el) return;
-  var d = state.commit;
-  el.innerHTML = state.files.map(function (f) {
-    var on = f.path === state.fileSel ? " on" : "";
-    var st = f.status === "added" ? "A" : f.status === "deleted" ? "D" : f.status === "renamed" ? "R" : f.status === "untracked" ? "U" : "M";
-    var label = f.status === "renamed" ? basename(f.oldPath) + " → " + basename(f.path) : basename(f.path);
-    var cnt = "";
-    var cached = state.fileCache[f.path];
-    if (cached && cached.counts) cnt = '<span class="cnt">+' + cached.counts.additions + " −" + cached.counts.deletions + "</span>";
-    var tip = f.status === "renamed" ? f.oldPath + " → " + f.path : f.path;
-    return '<button class="ftab' + on + '" data-path="' + esc(f.path) + '" title="' + esc(tip) + '">' +
-      '<span class="st ' + st + '">' + st + '</span><span class="fp">' + esc(label) + "</span>" + cnt + "</button>";
-  }).join("") || '<div class="diff-empty">No files changed.</div>';
-  Array.prototype.forEach.call(el.querySelectorAll(".ftab"), function (b) {
-    b.onclick = function () { state.fileSel = b.getAttribute("data-path"); renderTabs(); renderDiff(); };
+  if (!state.files.length) { el.innerHTML = '<div class="diff-empty">No files changed.</div>'; return; }
+
+  var root = { dirs: {}, files: [], path: "" };
+  state.files.forEach(function (f) {
+    var parts = f.path.split("/");
+    var node = root;
+    for (var i = 0; i < parts.length - 1; i++) {
+      if (!node.dirs[parts[i]]) node.dirs[parts[i]] = { dirs: {}, files: [], path: parts.slice(0, i + 1).join("/") };
+      node = node.dirs[parts[i]];
+    }
+    node.files.push(f);
+  });
+
+  /* auto-open the directory chain leading to the selected file; everything else starts collapsed */
+  var chain = {};
+  if (state.fileSel) {
+    var sp = state.fileSel.split("/");
+    for (var i = 1; i < sp.length; i++) chain[sp.slice(0, i).join("/")] = true;
+  }
+
+  function agg(n) {
+    var a = 0, d = 0, known = false;
+    n.files.forEach(function (f) {
+      var c = fileCounts(f);
+      if (c) { a += c.a; d += c.d; known = true; }
+    });
+    Object.keys(n.dirs).forEach(function (k) {
+      var r = agg(n.dirs[k]);
+      a += r.a; d += r.d; known = known || r.known;
+    });
+    n.adds = a; n.dels = d; n.known = known;
+    return { a: a, d: d, known: known };
+  }
+  agg(root);
+
+  function badge(f) {
+    return f.status === "added" ? "A" : f.status === "deleted" ? "D" : f.status === "renamed" ? "R" : f.status === "untracked" ? "U" : "M";
+  }
+  function cntHtml(c) {
+    return '<span class="t-cnt"><span class="ca">+' + c.a + '</span> <span class="cd">−' + c.d + "</span></span>";
+  }
+  function html(n, depth) {
+    var out = "";
+    Object.keys(n.dirs).sort().forEach(function (name) {
+      var dn = n.dirs[name];
+      var open = dn.path in state.treeOpen ? !!state.treeOpen[dn.path] : !!chain[dn.path];
+      out += '<button class="t-row t-dir' + (open ? " open" : "") + '" data-dir="' + esc(dn.path) + '" style="padding-left:' + (8 + depth * 14) + 'px">' +
+        '<span class="tw"><svg viewBox="0 0 8 8" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 1.5l3.5 2.5L2 6.5"/></svg></span>' +
+        '<span class="t-name">' + esc(name) + "</span>" + (dn.known ? cntHtml({ a: dn.adds, d: dn.dels }) : "") + "</button>";
+      if (open) out += html(dn, depth + 1);
+    });
+    n.files.slice().sort(function (a, b) { return a.path < b.path ? -1 : a.path > b.path ? 1 : 0; }).forEach(function (f) {
+      var c = fileCounts(f);
+      var on = f.path === state.fileSel ? " on" : "";
+      var tip = f.status === "renamed" ? f.oldPath + " → " + f.path : f.path;
+      out += '<button class="t-row t-file' + on + '" data-path="' + esc(f.path) + '" title="' + esc(tip) + '" style="padding-left:' + (8 + depth * 14) + 'px">' +
+        '<span class="st ' + badge(f) + '">' + badge(f) + '</span><span class="t-name">' + esc(basename(f.path)) + "</span>" + (c ? cntHtml(c) : "") + "</button>";
+    });
+    return out;
+  }
+  el.innerHTML = html(root, 0);
+
+  Array.prototype.forEach.call(el.querySelectorAll(".t-dir"), function (b) {
+    b.onclick = function () {
+      var path = b.getAttribute("data-dir");
+      var cur = path in state.treeOpen ? !!state.treeOpen[path] : !!chain[path];
+      state.treeOpen[path] = !cur;
+      renderTree();
+    };
+  });
+  Array.prototype.forEach.call(el.querySelectorAll(".t-file"), function (b) {
+    b.onclick = function () {
+      state.fileSel = b.getAttribute("data-path");
+      renderTree(); renderDiff();
+    };
   });
 }
 
@@ -632,7 +730,7 @@ async function renderDiff() {
   }
   if (state.fileSel !== f.path) return; // user switched while loading
   state.fileCache[f.path] = data;
-  renderTabs();
+  renderTree();
   box.innerHTML = head + diffHtml(data);
   bindDiffButtons(f);
 }
@@ -718,6 +816,8 @@ function mainEmpty(big, title, bodyHtml) {
 function bindChrome() {
   applyTheme(document.documentElement.getAttribute("data-theme") || "light");
   $("themeBtn").onclick = toggleTheme;
+  $("collapseSide").onclick = toggleSide;
+  $("expandSide").onclick = toggleSide;
   $("repoSel").onchange = function () { openRepo(this.value, null, null); };
   $("branchSel").onchange = function () { loadCommits(0, null); };
   $("refreshBtn").onclick = function () {

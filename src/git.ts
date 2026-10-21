@@ -181,6 +181,8 @@ export interface CommitFile {
   oldPath: string | null;
   status: "added" | "modified" | "deleted" | "renamed";
   binary: boolean;
+  additions: number | null;
+  deletions: number | null;
 }
 
 export interface CommitDetail {
@@ -219,12 +221,12 @@ export async function commitDetail(repo: string, sha: string): Promise<CommitDet
     if (statusCode === "R" || statusCode === "C") {
       const oldP = tokens[++i];
       const newP = tokens[++i];
-      files.push({ path: newP, oldPath: oldP, status: "renamed", binary: false });
+      files.push({ path: newP, oldPath: oldP, status: "renamed", binary: false, additions: null, deletions: null });
     } else {
       const p = tokens[++i];
       const status: CommitFile["status"] =
         statusCode === "A" ? "added" : statusCode === "D" ? "deleted" : "modified";
-      files.push({ path: p, oldPath: null, status, binary: false });
+      files.push({ path: p, oldPath: null, status, binary: false, additions: null, deletions: null });
     }
   }
 
@@ -247,26 +249,34 @@ export async function commitDetail(repo: string, sha: string): Promise<CommitDet
     /* stats are decorative */
   }
 
-  // Binary detection: ask diff-tree for the binary flag via numstat-like output.
+  // Per-file +/- counts and binary flags from numstat on the same diff range.
   try {
     const bArgs = diffBase
       ? ["diff", "--numstat", "-M", diffBase, fullSha]
       : ["show", "--root", "--numstat", "--format=", fullSha];
     const bOut = await git(repo, bArgs);
-    const binSet = new Set(
-      bOut
-        .split("\n")
-        .filter((l) => l.startsWith("-\t-\t"))
-        .map((l) => {
-          // numstat rename form: "-\t-\told => new" or plain path
-          const p = l.slice(4);
-          const rm = /^(.*) => (.*)$/.exec(p);
-          return rm ? rm[2] : p;
-        }),
-    );
-    for (const f of files) if (binSet.has(f.path)) f.binary = true;
+    const statMap = new Map<string, { a: number | null; d: number | null; binary: boolean }>();
+    for (const line of bOut.split("\n")) {
+      if (!line) continue;
+      const parts = line.split("\t");
+      if (parts.length < 3) continue;
+      const a = parts[0] === "-" ? null : parseInt(parts[0], 10);
+      const d = parts[1] === "-" ? null : parseInt(parts[1], 10);
+      let p = parts.slice(2).join("\t");
+      const rm = /^(.*) => (.*)$/.exec(p); // numstat (non-z) renders renames as "old => new"
+      if (rm) p = rm[2];
+      statMap.set(p, { a, d, binary: a === null || d === null });
+    }
+    for (const f of files) {
+      const e = statMap.get(f.path);
+      if (e) {
+        f.binary = e.binary;
+        f.additions = e.binary ? null : e.a;
+        f.deletions = e.binary ? null : e.d;
+      }
+    }
   } catch {
-    /* binary flags are decorative */
+    /* per-file stats are decorative */
   }
 
   return {

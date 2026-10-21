@@ -416,7 +416,11 @@ function createDropdown(rootId, opts) {
     filtered = !q ? items.slice() : items.filter(function (it) {
       return it.label.toLowerCase().indexOf(q) >= 0 || (it.sub || "").toLowerCase().indexOf(q) >= 0 || (it.group || "").toLowerCase().indexOf(q) >= 0;
     });
-    hi = filtered.length ? 0 : -1;
+    hi = -1;
+    if (current != null) {
+      for (var i = 0; i < filtered.length; i++) { if (filtered[i].value === current) { hi = i; break; } }
+    }
+    if (hi < 0) hi = filtered.length ? 0 : -1;
     renderList();
   }
   function openMenu() {
@@ -426,6 +430,7 @@ function createDropdown(rootId, opts) {
     btn.setAttribute("aria-expanded", "true");
     search.value = "";
     applyFilter();
+    scrollHi();
     setTimeout(function () { search.focus(); }, 0);
   }
   function closeMenu() {

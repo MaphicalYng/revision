@@ -142,6 +142,7 @@ body {
 .dd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dd-caret { color: var(--text-3); flex: none; transition: transform 0.15s ease; }
 .dd.open .dd-caret { transform: rotate(180deg); }
+.dd-menu[hidden] { display: none; }
 .dd-menu {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
   min-width: 100%; width: max-content; max-width: 360px;

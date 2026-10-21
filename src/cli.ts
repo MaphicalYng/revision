@@ -7,6 +7,8 @@
  *   revision [dir]            serve repos under `dir` (default: cwd)
  *     -p, --port <n>          port to listen on (default 4777, walks up if busy)
  *     --host <ip>             bind address (default 127.0.0.1; LAN: 0.0.0.0)
+ *     --token <secret>        access token (default: random token, printed at startup)
+ *     --no-auth               disable token authentication
  *     --no-open               do not open the browser
  *     -v, --version           print version
  *     -h, --help              show help
@@ -15,6 +17,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
 import { startServer } from "./server.js";
 
@@ -23,9 +26,19 @@ interface CliOptions {
   host: string;
   port: number;
   open: boolean;
+  token: string | null;
+  authSet: boolean; // user explicitly chose --token or --no-auth
 }
 
-const DEFAULTS: CliOptions = { dir: ".", host: "127.0.0.1", port: 4777, open: true };
+const DEFAULTS: CliOptions = { dir: ".", host: "127.0.0.1", port: 4777, open: true, token: null, authSet: false };
+
+function randomToken(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+function isLoopback(host: string): boolean {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
 
 function version(): string {
   try {
@@ -45,6 +58,8 @@ Usage
 Options
   -p, --port <n>     port (default ${DEFAULTS.port}; walks up to +20 if busy)
   --host <ip>        bind address (default ${DEFAULTS.host}; use 0.0.0.0 for LAN)
+  --token <secret>   access token (default: random token, printed at startup)
+  --no-auth          disable token authentication
   --no-open          skip opening the browser
   -v, --version      print version
   -h, --help         show this help
@@ -52,6 +67,7 @@ Options
 Examples
   revision                     # serve repos under the current directory
   revision ~/code --port 8080  # serve repos under ~/code on :8080
+  revision ~/code --no-auth    # LAN-trusted environments only
 `;
 }
 
@@ -71,6 +87,15 @@ export function parseArgs(argv: string[]): CliOptions & { help?: boolean } {
         break;
       case "--no-open":
         out.open = false;
+        break;
+      case "--no-auth":
+        out.token = null;
+        out.authSet = true;
+        break;
+      case "--token":
+        out.token = argv[++i] ?? fail("missing value for --token");
+        if (!out.token) fail("--token must not be empty");
+        out.authSet = true;
         break;
       case "-p":
       case "--port": {
@@ -116,14 +141,26 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Default to a fresh random token unless the user explicitly opted in/out.
+  const token = opts.authSet ? opts.token : randomToken();
+  if (!opts.authSet && !isLoopback(opts.host)) {
+    console.error("revision: warning: binding to a non-loopback address with an auto-generated token;");
+    console.error("  copy the token below to every client, or set a known one with --token.");
+  }
+  if (opts.authSet && opts.token === null && !isLoopback(opts.host)) {
+    console.error("revision: warning: --no-auth on a non-loopback address exposes the repos to the network.");
+  }
+
   const root = path.resolve(process.cwd(), opts.dir);
   try {
-    const { url } = await startServer({ root, host: opts.host, port: opts.port });
+    const { url } = await startServer({ root, host: opts.host, port: opts.port, token });
     const display = path.relative(process.cwd(), root) || ".";
+    const pageUrl = token ? url + "/?token=" + encodeURIComponent(token) : url + "/";
     console.log(`revision ${version()}`);
     console.log(`  serving : ${display}`);
-    console.log(`  listen  : ${url}`);
-    if (opts.open) openBrowser(url);
+    console.log(`  listen  : ${pageUrl}`);
+    if (token) console.log("  auth    : token required (--token to set your own, --no-auth to disable)");
+    if (opts.open) openBrowser(pageUrl);
   } catch (e) {
     console.error(`revision: ${e instanceof Error ? e.message : String(e)}`);
     process.exit(1);

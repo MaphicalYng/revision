@@ -41,8 +41,19 @@ npx revision ~/code
 revision [dir]            # serve repos under `dir` (default: cwd)
   -p, --port <n>          # default 4777; walks up to +20 if the port is busy
   --host <ip>             # default 127.0.0.1; use 0.0.0.0 for LAN access
+  --token <secret>        # access token (default: random token, printed at startup)
+  --no-auth               # disable token authentication (loopback only!)
   --no-open               # do not open the browser
 ```
+
+**Token authentication is on by default.** Every start generates a random token and prints a ready-to-use URL:
+
+```
+revision ~/code
+  listen  : http://127.0.0.1:4777/?token=GgY9rM3xQ8wK2vZpL7sN4tRf
+```
+
+The page carries `?token=` in its URL and forwards it as an `Authorization: Bearer` header on every API call; API clients can pass either form. Without a valid token the server answers `401` for both the page and the API. Comparison is constant-time. Pass `--token <secret>` to choose your own (handy for bookmarks or multiple clients), or `--no-auth` only when the bind address is loopback / behind your own reverse-proxy auth.
 
 Every immediate subdirectory of `dir` that contains a `.git` entry shows up in the repo picker. Click a commit on the left, switch files along the top, read the diff.
 
@@ -66,7 +77,7 @@ Every immediate subdirectory of `dir` that contains a `.git` entry shows up in t
 - **Merge commits** — diff computed against the first parent, with a note in the header
 - **Root commits** — handled via `git diff-tree --root` / `git show`
 - **Hash routing** — `#r=<repo>&b=<branch>&c=<sha>` is synced as you navigate, so any view is a shareable/bookmarkable URL
-- **Security** — repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls go through `execFile` argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
+- **Security** — token authentication on by default (random token per start, printed as a ready URL; `--token` to fix your own, `--no-auth` to opt out); constant-time comparison; repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls go through `execFile` argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
 
 ## Architecture
 

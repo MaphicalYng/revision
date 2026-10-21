@@ -9,6 +9,7 @@
 import http from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { timingSafeEqual } from "node:crypto";
 
 import { parseGitDiff, toSideBySide, countChanges, type SideBySideRow, type Hunk } from "./diff.js";
 import {
@@ -26,6 +27,8 @@ export interface ServerOptions {
   root: string;
   host: string;
   port: number;
+  /** Access token; null disables authentication (loopback-only setups). */
+  token: string | null;
 }
 
 interface RepoEntry {
@@ -45,6 +48,25 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
   if (!rootStat.isDirectory()) throw new Error(`not a directory: ${root}`);
 
   let pageHtml: string | null = null;
+
+  const authorized = (req: http.IncomingMessage, url: URL): boolean => {
+    if (!opts.token) return true;
+    const h = req.headers.authorization;
+    const presented = h && h.startsWith("Bearer ") ? h.slice(7) : (url.searchParams.get("token") ?? "");
+    const a = Buffer.from(presented);
+    const b = Buffer.from(opts.token);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+
+  const unauthorized = (res: http.ServerResponse, isApi: boolean): void => {
+    if (isApi) {
+      res.writeHead(401, { "Content-Type": "application/json; charset=utf-8", "WWW-Authenticate": "Bearer", ...SECURITY_HEADERS });
+      res.end(JSON.stringify({ error: "unauthorized: pass the token via ?token= or Authorization: Bearer" }));
+    } else {
+      res.writeHead(401, { "Content-Type": "text/html; charset=utf-8", "WWW-Authenticate": "Bearer", ...SECURITY_HEADERS });
+      res.end('<!DOCTYPE html><html><head><meta charset="utf-8"><title>revision — unauthorized</title></head><body style="font-family:system-ui;background:#0c0e12;color:#e6e9ef;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="font-size:18px">401 — token required</h1><p style="color:#9aa3b2;font-size:13px">Start the server with <code>--token &lt;secret&gt;</code>, or reopen the URL printed in the terminal (it includes the token).</p></div></body></html>');
+    }
+  };
 
   // Repo cache: rescan at most once per 3s.
   let repoCache: { at: number; repos: RepoEntry[] } = { at: 0, repos: [] };
@@ -108,6 +130,12 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
       const url = new URL(req.url ?? "/", "http://localhost");
       const p = url.pathname;
       const m = (re: RegExp) => re.exec(p);
+      const isApi = p.startsWith("/api/");
+
+      if (!authorized(req, url)) {
+        unauthorized(res, isApi);
+        return;
+      }
 
       // ---- page ----
       if (req.method === "GET" && (p === "/" || p === "/index.html")) {

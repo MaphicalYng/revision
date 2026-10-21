@@ -258,6 +258,10 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 const JS = String.raw`
 "use strict";
 var $ = function (id) { return document.getElementById(id); };
+/* Access token: the server prints a URL of the form /?token=<secret> at startup.
+   The page keeps it in the query string and forwards it as a Bearer header on
+   every API call, so it never needs to live in sessionStorage or a cookie. */
+var TOKEN = new URLSearchParams(location.search).get("token") || "";
 var state = {
   repos: [], repo: null, branches: [], branch: null,
   commits: [], hasMore: false, loading: false,
@@ -274,9 +278,15 @@ function toast(msg) {
   clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove("show"); }, 2600);
 }
 async function api(path) {
-  var r = await fetch(path, { headers: { "Accept": "application/json" } });
+  var headers = { "Accept": "application/json" };
+  if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  var r = await fetch(path, { headers: headers });
   var body = null;
   try { body = await r.json(); } catch (e) { /* non-json */ }
+  if (r.status === 401) {
+    mainEmpty("🔒", "Unauthorized", 'This revision server requires a token. Reopen it via the URL printed in the terminal (it contains <code class="k">?token=...</code>), or start it with <code class="k">--token &lt;secret&gt;</code>.');
+    throw new Error("unauthorized");
+  }
   if (!r.ok) throw new Error((body && body.error) || ("HTTP " + r.status));
   return body;
 }
@@ -319,7 +329,7 @@ async function boot() {
     var data = await api("/api/repos");
     state.repos = data.repos;
   } catch (e) {
-    mainEmpty("⚠️", "Failed to scan repositories", esc(e.message));
+    if (e.message !== "unauthorized") mainEmpty("⚠️", "Failed to scan repositories", esc(e.message));
     return;
   }
   var sel = $("repoSel");

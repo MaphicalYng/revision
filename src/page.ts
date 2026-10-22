@@ -5,6 +5,14 @@
  * borders, one cool accent, and diff rows that read like paper tape.
  */
 
+/* Tab icon: brand glyph as a theme-adaptive SVG (accent stroke follows the OS
+   light/dark setting), PNG screenshot of the same glyph as fallback for browsers
+   without SVG favicon support (Safari < 26). */
+const FAVICON_SVG =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230969da' stroke-width='1.8' stroke-linecap='round'%3E%3Cstyle%3E@media (prefers-color-scheme: dark) { svg { stroke: %235b9dff } }%3C/style%3E%3Ccircle cx='4.5' cy='3.5' r='1.8'/%3E%3Ccircle cx='4.5' cy='12.5' r='1.8'/%3E%3Ccircle cx='11.5' cy='8' r='1.8'/%3E%3Cpath d='M4.5 5.3v5.4M6 4.2l3.2 2.8M6 11.8l3.2-2.8'/%3E%3C/svg%3E";
+const FAVICON_PNG =
+  "data:image/png;base64,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";
+
 export function renderPage(): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -14,6 +22,8 @@ export function renderPage(): string {
 <meta name="color-scheme" content="light dark">
 <script>try{var d=document.documentElement;d.setAttribute("data-theme",localStorage.getItem("revision-theme")==="dark"?"dark":"light");d.classList.toggle("side-collapsed",localStorage.getItem("revision-side")==="collapsed")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
 <title>revision</title>
+<link rel="icon" type="image/svg+xml" href="${FAVICON_SVG}">
+<link rel="icon" href="${FAVICON_PNG}">
 <style>${CSS}</style>
 </head>
 <body>

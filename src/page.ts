@@ -268,12 +268,12 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
   color: var(--text); font: 500 12px var(--sans); outline: none;
 }
 .ftree-search:focus { border-color: var(--accent); }
-.ftree-body { flex: 1; min-height: 0; overflow-y: auto; }
+.ftree-body { flex: 1; min-height: 0; overflow: auto; }
 .t-row {
-  display: flex; align-items: center; gap: 7px; width: 100%;
+  display: flex; align-items: center; gap: 7px;
   text-align: left; background: transparent; color: var(--text-2);
   border: 0; border-radius: 7px; padding: 4px 8px; cursor: pointer;
-  font: 500 12.5px var(--sans); white-space: nowrap; min-width: 0;
+  font: 500 12.5px var(--sans); white-space: nowrap; width: max-content; min-width: 100%;
 }
 .t-row:hover { background: var(--panel-2); color: var(--text); }
 .t-file.on { background: var(--accent-dim); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
@@ -281,8 +281,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .tw { display: grid; place-items: center; width: 12px; flex: none; color: var(--text-3); transition: transform 0.12s ease; }
 .tw svg { display: block; }
 .t-dir.open .tw { transform: rotate(90deg); }
-.t-name { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
-.t-cnt { margin-left: auto; font: 500 11px var(--mono); color: var(--text-3); flex: none; }
+.t-name { flex: none; }
+.t-cnt { margin-left: auto; padding-left: 14px; font: 500 11px var(--mono); color: var(--text-3); flex: none; }
 .t-cnt .ca { color: var(--add-num); }
 .t-cnt .cd { color: var(--del-num); }
 .st { font: 700 10px var(--mono); width: 15px; height: 15px; border-radius: 4px; display: inline-grid; place-items: center; flex: none; }
@@ -839,10 +839,17 @@ function renderTree() {
     var out = "";
     Object.keys(n.dirs).sort().forEach(function (name) {
       var dn = n.dirs[name];
+      /* collapse a chain of single-subdirectory, file-less dirs into one row: a/b/c */
+      var label = name;
+      while (Object.keys(dn.dirs).length === 1 && dn.files.length === 0) {
+        var sub = Object.keys(dn.dirs)[0];
+        label += "/" + sub;
+        dn = dn.dirs[sub];
+      }
       var open = dn.path in state.treeOpen ? !!state.treeOpen[dn.path] : !!chain[dn.path];
-      out += '<button class="t-row t-dir' + (open ? " open" : "") + '" data-dir="' + esc(dn.path) + '" style="padding-left:' + (8 + depth * 14) + 'px">' +
+      out += '<button class="t-row t-dir' + (open ? " open" : "") + '" data-dir="' + esc(dn.path) + '" title="' + esc(label) + '" style="padding-left:' + (8 + depth * 14) + 'px">' +
         '<span class="tw"><svg viewBox="0 0 8 8" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 1.5l3.5 2.5L2 6.5"/></svg></span>' +
-        '<span class="t-name">' + esc(name) + "</span>" + (dn.known ? cntHtml({ a: dn.adds, d: dn.dels }) : "") + "</button>";
+        '<span class="t-name">' + esc(label) + "</span>" + (dn.known ? cntHtml({ a: dn.adds, d: dn.dels }) : "") + "</button>";
       if (open) out += html(dn, depth + 1);
     });
     n.files.slice().sort(function (a, b) { return a.path < b.path ? -1 : a.path > b.path ? 1 : 0; }).forEach(function (f) {

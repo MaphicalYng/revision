@@ -74,6 +74,7 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 - **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs, unborn-branch support
 - **Commit detail** — full message body, author, exact date, copyable SHA, aggregate `files changed / +ins / −del` stats
 - **Side-by-side diff** — the old file on the left, the new file on the right, each with its own line numbers; deletion/addition runs pair row-by-row so both columns stay aligned; unpaired leftovers render with an empty opposite cell
+- **Syntax highlighting** — diff rows are highlighted per file extension (37 languages via a vendored [highlight.js](https://highlightjs.org) — no CDN, no extra dependency, still one self-contained HTML page); GitHub-light/dark token palettes that follow the theme toggle; word-level change marks overlay the highlighted line so strings and comments spanning a change keep their colors; files above 5000 diff rows skip highlighting to stay fast
 - **Word-level highlights** — paired changed lines are split into common-prefix / changed-middle / common-suffix token spans so only what actually changed lights up
 - **Hunk headers** — `@@ -a,b +c,d @@` separators between change blocks
 - **Binary & oversized files** — detected and shown as notices instead of hanging the page (diffs above ~1.5 MB are refused with a copy-pasteable `git diff` command)
@@ -93,6 +94,7 @@ src/
   git.ts      safe execFile wrappers around the git CLI
   diff.ts     unified-diff parser + side-by-side row pairing + word spans
   page.ts     the single-page UI (inline CSS/JS, no build step)
+  hljs.ts     vendored highlight.js v11.11.1 (common bundle), inlined into the page
 bin/
   revision.js  npm bin wrapper -> dist/cli.js
 scripts/

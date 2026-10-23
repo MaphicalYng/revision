@@ -5,6 +5,8 @@
  * borders, one cool accent, and diff rows that read like paper tape.
  */
 
+import { HLJS_SRC } from "./hljs.js";
+
 /* Tab icon: brand glyph as a theme-adaptive SVG (accent stroke follows the OS
    light/dark setting), PNG screenshot of the same glyph as fallback for browsers
    without SVG favicon support (Safari < 26). */
@@ -63,6 +65,7 @@ export function renderPage(): string {
   <main class="main" id="main"></main>
 </div>
 <div class="toast" id="toast" role="status"></div>
+<script>${HLJS_SRC}</script>
 <script>${JS}</script>
 </body>
 </html>`;
@@ -90,6 +93,17 @@ const CSS = `
   --add-word: rgba(26, 127, 55, 0.30);
   --del-word: rgba(207, 34, 46, 0.26);
   --scrollbar: #cfd6de;
+  /* syntax highlighting tokens (GitHub Light palette) */
+  --hl-comment: #6e7781;
+  --hl-keyword: #cf222e;
+  --hl-string: #0a3069;
+  --hl-number: #0550ae;
+  --hl-func: #6639ba;
+  --hl-type: #953800;
+  --hl-name: #116329;
+  --hl-attr: #0550ae;
+  --hl-symbol: #0550ae;
+  --hl-meta: #6e7781;
   /* theme-independent */
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -116,6 +130,16 @@ const CSS = `
   --add-word: rgba(63, 185, 80, 0.32);
   --del-word: rgba(248, 81, 73, 0.32);
   --scrollbar: #262c38;
+  --hl-comment: #8b949e;
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-number: #79c0ff;
+  --hl-func: #d2a8ff;
+  --hl-type: #ffa657;
+  --hl-name: #7ee787;
+  --hl-attr: #79c0ff;
+  --hl-symbol: #79c0ff;
+  --hl-meta: #8b949e;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -328,14 +352,32 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .code.new { background: var(--bg); }
 .code.r-ctx { color: var(--text); }
 .no-n.r-add, .code.new.r-add { background: var(--add-bg); }
-.code.new.r-add { color: var(--add-num); }
+.code.new.r-add:not(.hl) { color: var(--add-num); }
 .no-o.r-del, .code.old.r-del { background: var(--del-bg); }
-.code.old.r-del { color: var(--del-num); }
-.code.old.r-pair { background: var(--del-bg); color: var(--del-num); }
-.code.new.r-pair { background: var(--add-bg); color: var(--add-num); }
+.code.old.r-del:not(.hl) { color: var(--del-num); }
+.code.old.r-pair { background: var(--del-bg); }
+.code.old.r-pair:not(.hl) { color: var(--del-num); }
+.code.new.r-pair { background: var(--add-bg); }
+.code.new.r-pair:not(.hl) { color: var(--add-num); }
 .code.r-gap { color: var(--text-3); font-style: italic; }
 mark.w-del { background: var(--del-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* ---------- syntax highlighting (highlight.js tokens, GitHub palette) ---------- */
+.code .hljs-comment, .code .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.code .hljs-keyword, .code .hljs-selector-tag { color: var(--hl-keyword); }
+.code .hljs-string, .code .hljs-regexp, .code .hljs-doctag { color: var(--hl-string); }
+.code .hljs-number, .code .hljs-literal { color: var(--hl-number); }
+.code .hljs-title, .code .hljs-title.function_, .code .hljs-section { color: var(--hl-func); }
+.code .hljs-title.class_, .code .hljs-title.interface_, .code .hljs-type, .code .hljs-built_in { color: var(--hl-type); }
+.code .hljs-name { color: var(--hl-name); }
+.code .hljs-attr, .code .hljs-attribute, .code .hljs-variable, .code .hljs-template-variable,
+.code .hljs-selector-attr, .code .hljs-selector-class, .code .hljs-selector-id { color: var(--hl-attr); }
+.code .hljs-symbol, .code .hljs-bullet, .code .hljs-link { color: var(--hl-symbol); }
+.code .hljs-meta, .code .hljs-selector-pseudo { color: var(--hl-meta); }
+.code .hljs-emphasis { font-style: italic; }
+.code .hljs-strong { font-weight: 700; }
+.code .hljs-underline { text-decoration: underline; }
 .diff-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font: 13px var(--sans); }
 .diff-empty code { font: 12px var(--mono); background: var(--panel-3); padding: 2px 8px; border-radius: 5px; }
 .binary-note { padding: 30px 20px; text-align: center; color: var(--text-3); }
@@ -944,33 +986,84 @@ function diffHtml(fd) {
     if (fd.binary) return '<div class="binary-note">Binary file — diff not shown.</div>';
     return '<div class="diff-empty">No content changes (pure rename, mode change, or empty file).</div>';
   }
+  var lang = langForFile(state.fileSel || "");
+  var rowTotal = 0;
+  fd.hunks.forEach(function (h) { rowTotal += h.rows.length; });
+  var hlOn = !!lang && rowTotal <= HL_ROW_CAP;
   var html = ['<div class="diff">'];
   fd.hunks.forEach(function (h) {
     html.push('<div class="hunk-head">@@ -' + h.oldStart + "," + h.oldCount + " +" + h.newStart + "," + h.newCount + " @@</div>");
     h.rows.forEach(function (r) {
       var cls = r.paired ? "r-pair" : r.oldText === null ? "r-add" : r.newText === null ? "r-del" : "r-ctx";
       if (r.oldText === null && r.newText === null) cls = "r-gap";
+      var hlc = hlOn ? " hl" : "";
       var oldCell, newCell;
+      var o = splitTail(r.oldText), n = splitTail(r.newText);
       if (r.paired && r.oldText !== r.newText) {
-        var sp = wordSpans(r.oldText, r.newText);
+        var sp = wordSpans(o[0], n[0]);
         if (sp) {
-          oldCell = esc(sp.aPre) + "<mark class=\"w-del\">" + esc(sp.aMid) + "</mark>" + esc(sp.aSuf);
-          newCell = esc(sp.bPre) + "<mark class=\"w-add\">" + esc(sp.bMid) + "</mark>" + esc(sp.bSuf);
+          if (hlOn) {
+            /* highlight the whole line first, then wrap just the changed
+               range — re-lexing segments separately would mis-color tokens
+               that span a boundary (strings, comments) */
+            oldCell = wrapRange(hlLine(o[0], lang), sp.aPre.length, sp.aPre.length + sp.aMid.length, "w-del") + esc(o[1]);
+            newCell = wrapRange(hlLine(n[0], lang), sp.bPre.length, sp.bPre.length + sp.bMid.length, "w-add") + esc(n[1]);
+          } else {
+            oldCell = esc(sp.aPre) + '<mark class="w-del">' + esc(sp.aMid) + '</mark>' + esc(sp.aSuf) + esc(o[1]);
+            newCell = esc(sp.bPre) + '<mark class="w-add">' + esc(sp.bMid) + '</mark>' + esc(sp.bSuf) + esc(n[1]);
+          }
         } else {
-          oldCell = esc(r.oldText); newCell = esc(r.newText);
+          oldCell = cellHtml(o, lang, hlOn); newCell = cellHtml(n, lang, hlOn);
         }
       } else {
-        oldCell = r.oldText === null ? "" : esc(r.oldText);
-        newCell = r.newText === null ? "" : esc(r.newText);
+        oldCell = cellHtml(o, lang, hlOn); newCell = cellHtml(n, lang, hlOn);
       }
       html.push('<div class="no no-o ' + cls + '">' + (r.oldNo == null ? "" : r.oldNo) + "</div>");
-      html.push('<div class="code old ' + cls + '">' + oldCell + "</div>");
+      html.push('<div class="code old ' + cls + hlc + '">' + oldCell + "</div>");
       html.push('<div class="no no-n ' + cls + '">' + (r.newNo == null ? "" : r.newNo) + "</div>");
-      html.push('<div class="code new ' + cls + '">' + newCell + "</div>");
+      html.push('<div class="code new ' + cls + hlc + '">' + newCell + "</div>");
     });
   });
   html.push("</div>");
   return '<div class="diff-scroll">' + html.join("") + "</div>";
+}
+
+/* Split off the parser-appended "\ No newline at end of file" tail (joined by a real \n):
+   the code part gets highlighted, the note renders verbatim on a second line. */
+function splitTail(text) {
+  if (text === null) return null;
+  var i = text.indexOf("\n");
+  return i < 0 ? [text, ""] : [text.slice(0, i), text.slice(i)];
+}
+function cellHtml(parts, lang, hlOn) {
+  if (parts === null) return "";
+  return hlOn ? hlLine(parts[0], lang) + esc(parts[1]) : esc(parts[0] + parts[1]);
+}
+
+/* Wrap the plain-text range [start, end) of an already-escaped highlighted
+   line in a <mark>, so word-level marks overlay syntax colors instead of
+   replacing them. Boundaries fall on tokenizer token edges and escaped
+   entities count as one character, so scanning text runs char-by-char
+   (tags pass through untouched) lands exactly. */
+function wrapRange(h, start, end, kind) {
+  if (end <= start) return h;
+  var out = [], pos = 0, open = false;
+  var re = /(<[^>]+>)|([^<]+)/g, m;
+  while ((m = re.exec(h)) !== null) {
+    if (m[1]) { out.push(m[1]); continue; }
+    var txt = m[2], i = 0;
+    while (i < txt.length) {
+      var semi = txt[i] === "&" ? txt.indexOf(";", i) : -1;
+      var hlen = semi > i ? semi - i + 1 : 1;
+      if (!open && pos === start) { out.push('<mark class="' + kind + '">'); open = true; }
+      out.push(txt.slice(i, i + hlen));
+      i += hlen;
+      pos++;
+      if (open && pos === end) { out.push("</mark>"); open = false; }
+    }
+  }
+  if (open) out.push("</mark>");
+  return out.join("");
 }
 
 /* Token-based common prefix/suffix split for word-level highlighting. */
@@ -989,6 +1082,71 @@ function wordSpans(a, b) {
     aPre: ta.slice(0, pre).join(""), aMid: aMid, aSuf: ta.slice(ta.length - suf).join(""),
     bPre: tb.slice(0, pre).join(""), bMid: bMid, bSuf: tb.slice(tb.length - suf).join("")
   };
+}
+
+/* ---------------- syntax highlighting ----------------
+   highlight.js (vendored above as window.hljs, see src/hljs.ts) does the
+   lexing. Language comes from the file extension; unknown extensions stay
+   plain. Each line is highlighted on its own so rows stay independent of
+   each other, and results are memoized because context rows repeat on both
+   sides of the view. */
+var HL_ROW_CAP = 5000; /* beyond this, skip highlighting to keep rendering fast */
+var hlAvailable = typeof hljs !== "undefined" && !!hljs && typeof hljs.highlight === "function";
+var HL_CACHE_MAX = 20000;
+var hlCache = new Map();
+
+var LANG_BY_EXT = {
+  sh: "bash", bash: "bash", zsh: "bash", ksh: "bash",
+  c: "c", h: "c",
+  cc: "cpp", cpp: "cpp", cxx: "cpp", hh: "cpp", hpp: "cpp", hxx: "cpp",
+  cs: "csharp", css: "css", scss: "scss", less: "less",
+  diff: "diff", patch: "diff",
+  go: "go", graphql: "graphql", gql: "graphql",
+  ini: "ini", cfg: "ini", conf: "ini", toml: "ini", env: "ini",
+  java: "java",
+  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
+  json: "json", jsonc: "json", json5: "json",
+  kt: "kotlin", kts: "kotlin",
+  lua: "lua",
+  mak: "makefile", mk: "makefile",
+  md: "markdown", markdown: "markdown",
+  m: "objectivec", mm: "objectivec",
+  pl: "perl", pm: "perl",
+  php: "php", phtml: "php",
+  py: "python", pyi: "python", pyw: "python",
+  r: "r", rb: "ruby", rs: "rust",
+  sql: "sql", swift: "swift",
+  ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
+  vb: "vbnet",
+  wat: "wasm", wast: "wasm",
+  html: "xml", htm: "xml", xml: "xml", svg: "xml", vue: "xml", xhtml: "xml",
+  yml: "yaml", yaml: "yaml"
+};
+
+function langForFile(path) {
+  if (!hlAvailable) return null;
+  var base = basename(path).toLowerCase();
+  if (base === "makefile" || base === "gnumakefile") return "makefile";
+  if (base === "dockerfile") return "bash"; /* closest bundled grammar */
+  var dot = base.lastIndexOf(".");
+  if (dot < 0) return null;
+  var lang = LANG_BY_EXT[base.slice(dot + 1)];
+  return lang && hljs.getLanguage(lang) ? lang : null;
+}
+
+function hlLine(text, lang) {
+  var key = lang + "\0" + text;
+  var hit = hlCache.get(key);
+  if (hit != null) return hit;
+  var html;
+  try {
+    html = hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+  } catch (e) {
+    html = esc(text);
+  }
+  if (hlCache.size >= HL_CACHE_MAX) hlCache.clear();
+  hlCache.set(key, html);
+  return html;
 }
 
 function copyText(text, msg) {

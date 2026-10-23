@@ -77,6 +77,7 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 - **Syntax highlighting** — diff rows are highlighted per file extension (37 languages via a vendored [highlight.js](https://highlightjs.org) — no CDN, no extra dependency, still one self-contained HTML page); GitHub-light/dark token palettes that follow the theme toggle; word-level change marks overlay the highlighted line so strings and comments spanning a change keep their colors; files above 5000 diff rows skip highlighting to stay fast
 - **Word-level highlights** — paired changed lines are split into common-prefix / changed-middle / common-suffix token spans so only what actually changed lights up
 - **Hunk headers** — `@@ -a,b +c,d @@` separators between change blocks
+- **Collapsible context** — the space above, between, and below hunks renders as slim bars (`↑ 46 lines above [+20] [all]`); `+20` reveals twenty more lines toward the diff, middle gaps grow 10 lines per edge, `all` opens the whole region; a corners button in the diff header expands the **entire file** (and collapses back). Expansion is surgical DOM insertion — no re-render, scroll position never jumps; revealed rows reuse the same syntax highlighting with the 5000-row budget shared across hunk and revealed rows
 - **Binary & oversized files** — detected and shown as notices instead of hanging the page (diffs above ~1.5 MB are refused with a copy-pasteable `git diff` command)
 - **Merge commits** — diff computed against the first parent, with a note in the header
 - **Root commits** — handled via `git diff-tree --root` / `git show`
@@ -108,6 +109,7 @@ page --GET /api/repos----------------> server --fs scan------------> repo list
 page --GET /api/repo/:id/log?branch--> server --git log------------> commit rows
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> file list + stats
 page --GET .../diff?file=------------> server --git diff + parse---> { hunks: [{ rows }] }
+page --GET .../file?file=-------------> server --git show/cat-file---> { old, new } full texts (powers collapsed context)
 page renders rows in a 4-column grid: [old #][old code][new #][new code]
 ```
 

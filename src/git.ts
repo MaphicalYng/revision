@@ -320,6 +320,39 @@ export async function commitDetail(repo: string, sha: string): Promise<CommitDet
 /** Diff cap: above this the raw diff is rejected and the UI shows a notice. */
 export const DIFF_CHAR_CAP = 1_500_000;
 
+/** File-content cap for the context-expansion feature: blobs above this are
+ * reported as tooLarge instead of being shipped to the frontend. */
+export const CONTENT_CHAR_CAP = 1_000_000;
+
+/** Full text of a blob at `rev:path`; distinguishes "absent" from "too large". */
+export async function blobAtRev(
+  repo: string,
+  rev: string,
+  filePath: string,
+): Promise<{ text: string | null; tooLarge: boolean }> {
+  const spec = `${rev}:${filePath}`;
+  try {
+    const size = parseInt((await git(repo, ["cat-file", "-s", spec])).trim(), 10);
+    if (!Number.isFinite(size) || size > CONTENT_CHAR_CAP) return { text: null, tooLarge: true };
+    const text = await git(repo, ["cat-file", "-p", spec], { maxBuffer: CONTENT_CHAR_CAP + 1024 });
+    return { text, tooLarge: false };
+  } catch {
+    return { text: null, tooLarge: false }; // not present at this revision
+  }
+}
+
+/** Full text of a working-tree file; null when absent, tooLarge when over the cap. */
+export async function workFileText(repo: string, filePath: string): Promise<{ text: string | null; tooLarge: boolean }> {
+  try {
+    const full = path.join(repo, filePath);
+    const st = await fs.stat(full);
+    if (!st.isFile() || st.size > CONTENT_CHAR_CAP) return { text: null, tooLarge: st.isFile() };
+    return { text: await fs.readFile(full, "utf8"), tooLarge: false };
+  } catch {
+    return { text: null, tooLarge: false };
+  }
+}
+
 /** Raw unified diff for one file in a commit. */
 export async function fileDiff(repo: string, sha: string, diffBase: string | null, filePath: string): Promise<string> {
   const args = diffBase

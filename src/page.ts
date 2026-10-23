@@ -211,6 +211,7 @@ body {
   border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
 }
 .ibtn:hover { color: var(--text); border-color: var(--border-hover); }
+.ibtn.on { color: var(--accent); border-color: var(--accent); }
 
 /* ---------- layout ---------- */
 .body { flex: 1; display: flex; min-height: 0; }
@@ -360,6 +361,26 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .code.new.r-pair { background: var(--add-bg); }
 .code.new.r-pair:not(.hl) { color: var(--add-num); }
 .code.r-gap { color: var(--text-3); font-style: italic; }
+/* collapsed context regions (file head/tail and inter-hunk gaps) */
+.gapbar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 12px;
+  font: 11px/20px var(--mono); color: var(--text-3);
+  background: var(--panel-2);
+  border-top: 1px solid var(--border-soft);
+  position: sticky; left: 0;
+  user-select: none;
+}
+.gapbar:hover { color: var(--text-2); }
+.gapbar .gap-info { flex: none; white-space: nowrap; }
+.gapbar .gap-btn {
+  font: 10.5px/16px var(--mono); color: var(--text-2);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 8px; cursor: pointer;
+}
+.gapbar .gap-btn:hover { color: var(--text); background: var(--panel-3); }
+.gapbar .gap-btn:disabled { opacity: 0.45; cursor: default; }
 mark.w-del { background: var(--del-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 
@@ -548,7 +569,8 @@ var state = {
   repos: [], repo: null, branches: [], branch: null,
   commits: [], hasMore: false, loading: false,
   commit: null, files: [], fileSel: null, fileCache: {}, filter: "",
-  work: null, view: "commit", treeOpen: {}, fileQuery: ""
+  work: null, view: "commit", treeOpen: {}, fileQuery: "",
+  fileContent: {}, ctxExp: {}, diffMeta: {}
 };
 
 function esc(s) {
@@ -628,7 +650,7 @@ async function boot() {
 }
 
 async function openRepo(id, branchWanted, commitWanted) {
-  state.repo = id; state.fileCache = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit"; state.treeOpen = {};
+  state.repo = id; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit"; state.treeOpen = {};
   writeHash();
   try {
     var b = await api("/api/repo/" + encodeURIComponent(id) + "/branches");
@@ -703,7 +725,7 @@ function renderCommits() {
 async function selectCommit(sha) {
   if (!sha) return;
   state.view = "commit";
-  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {}; state.treeOpen = {}; state.fileQuery = "";
+  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.treeOpen = {}; state.fileQuery = "";
   renderCommits();
   var main = $("main");
   main.innerHTML = '<div class="empty"><div><div class="big">…</div><p>Loading commit…</p></div></div>';
@@ -736,7 +758,7 @@ async function loadWork() {
 async function selectWork() {
   if (!state.repo) return;
   state.view = "work";
-  state.commit = null; state.fileCache = {}; state.files = []; state.fileSel = null; state.treeOpen = {}; state.fileQuery = "";
+  state.commit = null; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.files = []; state.fileSel = null; state.treeOpen = {}; state.fileQuery = "";
   renderCommits();
   try {
     if (!state.work) state.work = await api("/api/repo/" + encodeURIComponent(state.repo) + "/work");
@@ -934,18 +956,25 @@ function renderTree() {
 async function renderDiff() {
   var box = $("diffbox");
   if (!box) return;
+  bindGapDelegation();
   var d = state.commit;
   var f = state.files.find(function (x) { return x.path === state.fileSel; });
   if (!f) { box.innerHTML = '<div class="diff-empty">No file selected.</div>'; return; }
 
+  var exp = state.ctxExp[f.path];
+  var wholeOn = !!(exp && exp.whole);
+  var corners = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2h-3a1 1 0 0 0-1 1v3M13.5 6.5v-3a1 1 0 0 0-1-1h-3M2 9.5v3a1 1 0 0 0 1 1h3M9.5 14h3a1 1 0 0 0 1-1v-3"/></svg>';
   var pathLabel = f.status === "renamed" ? esc(f.oldPath) + " → " + esc(f.path) : esc(f.path);
   var head = '<div class="diffpath"><span class="full">' + pathLabel + '</span>' +
-    '<button class="ibtn" id="copyPath" title="copy path" aria-label="copy path"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M11 5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5.5A1.5 1.5 0 0 0 4 11h1"/></svg></button></div>';
+    '<button class="ibtn" id="copyPath" title="copy path" aria-label="copy path"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M11 5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5.5A1.5 1.5 0 0 0 4 11h1"/></svg></button>' +
+    '<button class="ibtn' + (wholeOn ? " on" : "") + '" id="wholeBtn" style="margin-left:4px" title="' + (wholeOn ? "collapse back to the diff" : "expand to the whole file") +
+    '" aria-label="toggle whole file view">' + corners + "</button></div>";
 
   var cached = state.fileCache[f.path];
   if (cached && cached.hunks) {
-    box.innerHTML = head + diffHtml(cached);
+    box.innerHTML = head + diffHtml(cached, f);
     bindDiffButtons(f);
+    ensureContent(f);
     return;
   }
 
@@ -968,16 +997,149 @@ async function renderDiff() {
   if (state.fileSel !== f.path) return; // user switched while loading
   state.fileCache[f.path] = data;
   renderTree();
-  box.innerHTML = head + diffHtml(data);
+  box.innerHTML = head + diffHtml(data, f);
   bindDiffButtons(f);
+  ensureContent(f);
 }
 
 function bindDiffButtons(f) {
   var b = $("copyPath");
   if (b) b.onclick = function () { copyText(f.path, "Path copied"); };
+  var w = $("wholeBtn");
+  if (w) w.onclick = function () { toggleWhole(f); };
 }
 
-function diffHtml(fd) {
+/* Lazy background fetch of the full file on both diff sides; powers the
+   collapsed-context bars. Re-renders once when it arrives so bars/labels
+   that need line counts (file tail) appear. */
+async function ensureContent(f) {
+  var cur = state.fileContent[f.path];
+  if (cur !== undefined) return; /* object (ok or failed) or "loading" */
+  state.fileContent[f.path] = "loading";
+  try {
+    var url = state.view === "work"
+      ? "/api/repo/" + encodeURIComponent(state.repo) + "/work/file?file=" + encodeURIComponent(f.path)
+      : "/api/repo/" + encodeURIComponent(state.repo) + "/commit/" + encodeURIComponent(state.commit.sha) + "/file?file=" + encodeURIComponent(f.path);
+    var d = await api(url);
+    if (state.fileSel !== f.path) return;
+    if (d.tooLarge) {
+      state.fileContent[f.path] = { ok: false, old: null, new: null };
+    } else {
+      state.fileContent[f.path] = {
+        ok: d.old !== null || d.new !== null,
+        old: d.old === null ? null : splitLines(d.old),
+        new: d.new === null ? null : splitLines(d.new)
+      };
+    }
+  } catch (e) {
+    state.fileContent[f.path] = { ok: false, old: null, new: null };
+  }
+  if (state.fileSel === f.path && state.fileCache[f.path] && state.fileCache[f.path].hunks) renderDiff();
+}
+
+/* Delegated gap-bar clicks: one listener survives innerHTML re-renders. */
+function bindGapDelegation() {
+  var box = $("diffbox");
+  if (!box || box._gapBound) return;
+  box._gapBound = true;
+  box.addEventListener("click", function (ev) {
+    var t = ev.target;
+    if (!t || !t.closest) return;
+    var btn = t.closest(".gap-btn");
+    if (!btn) return;
+    var bar = btn.parentNode;
+    var f = state.files.find(function (x) { return x.path === state.fileSel; });
+    if (!f || !bar || !bar.getAttribute) return;
+    expandGapFromBar(f, bar, btn.getAttribute("data-act"));
+  });
+}
+
+function curGapState(f, gi) {
+  var exp = state.ctxExp[f.path] || (state.ctxExp[f.path] = { gaps: {}, whole: false });
+  var st = exp.gaps[gi] || (exp.gaps[gi] = { u: 0, l: 0 });
+  return { exp: exp, st: st };
+}
+
+/* Reveal relative slice [a, b) of gap g next to the bar (surgical DOM
+   insert — no re-render, scroll position stays). */
+function insertGapRows(bar, g, a, b, where) {
+  if (b <= a) return;
+  var tmp = document.createElement("div");
+  tmp.innerHTML = gapRowsHtml(g, a, b, true);
+  var nodes = Array.prototype.slice.call(tmp.children);
+  var ref = where === "before" ? bar : bar.nextSibling;
+  for (var i = 0; i < nodes.length; i++) bar.parentNode.insertBefore(nodes[i], ref);
+}
+
+function expandGapFromBar(f, bar, act) {
+  var fd = state.fileCache[f.path];
+  var content = state.fileContent[f.path];
+  if (!fd || !content || !content.ok) { toast("file content not loaded yet"); ensureContent(f); return; }
+  var gaps = gapList(fd, content);
+  var g = gaps[+bar.getAttribute("data-gap")];
+  if (!g) { bar.parentNode.removeChild(bar); return; }
+  var cs = curGapState(f, g.idx), st = cs.st;
+  var rem = g.size - st.u - st.l;
+  if (rem <= 0) { bar.parentNode.removeChild(bar); return; }
+  renderCtx = { content: content, meta: state.diffMeta[f.path] };
+  if (act === "all") {
+    insertGapRows(bar, g, st.u, g.size - st.l, "before");
+    st.u = g.size; st.l = 0;
+  } else if (g.pos === "mid") {
+    var s = Math.min(CTX_STEP / 2, Math.ceil(rem / 2)), t = Math.min(CTX_STEP / 2, rem - s);
+    if (s > 0) { insertGapRows(bar, g, st.u, st.u + s, "before"); st.u += s; }
+    if (t > 0) { insertGapRows(bar, g, g.size - st.l - t, g.size - st.l, "after"); st.l += t; }
+  } else if (g.pos === "top") {
+    var n1 = Math.min(CTX_STEP, rem);
+    insertGapRows(bar, g, g.size - st.l - n1, g.size - st.l, "after");
+    st.l += n1;
+  } else { /* bottom gap grows downward from the last hunk */
+    var n2 = Math.min(CTX_STEP, rem);
+    insertGapRows(bar, g, st.u, st.u + n2, "before");
+    st.u += n2;
+  }
+  rem = g.size - st.u - st.l;
+  if (rem <= 0) { bar.parentNode.removeChild(bar); return; }
+  bar.setAttribute("data-u", st.u);
+  bar.setAttribute("data-l", st.l);
+  var info = bar.querySelector(".gap-info");
+  if (info) info.textContent = gapArrow(g) + " " + rem + gapWhere(g);
+  var more = bar.querySelector('.gap-btn[data-act="more"]');
+  if (more) more.textContent = moreLabel(g, rem);
+}
+
+/* Whole-file toggle: reveal every remaining hidden region (or collapse
+   back to the plain diff, which re-renders from scratch). */
+function toggleWhole(f) {
+  var exp = state.ctxExp[f.path];
+  if (exp && exp.whole) {
+    state.ctxExp[f.path] = null;
+    state.diffMeta[f.path] = null; /* fresh highlight budget */
+    renderDiff();
+    return;
+  }
+  var fd = state.fileCache[f.path];
+  var content = state.fileContent[f.path];
+  if (!fd || !fd.hunks || !fd.hunks.length) return;
+  if (!content || !content.ok) { toast("file content not available for this file"); ensureContent(f); return; }
+  var cs = curGapState(f, 0); /* ensure container exists */
+  cs.exp.whole = true;
+  renderCtx = { content: content, meta: state.diffMeta[f.path] };
+  var gaps = gapList(fd, content);
+  for (var i = 0; i < gaps.length; i++) {
+    var g = gaps[i];
+    var bar = document.querySelector('.gapbar[data-gap="' + g.idx + '"]');
+    if (!bar) continue;
+    var st = cs.exp.gaps[g.idx] || { u: 0, l: 0 };
+    insertGapRows(bar, g, st.u, g.size - st.l, "before");
+    cs.exp.gaps[g.idx] = { u: g.size, l: 0 };
+    bar.parentNode.removeChild(bar);
+  }
+  var w = $("wholeBtn");
+  if (w) { w.title = "collapse back to the diff"; w.classList.add("on"); }
+}
+
+function diffHtml(fd, f) {
   if (fd.tooLarge) {
     return '<div class="diff-empty">This diff is too large to render (' + Math.round(fd.bytes / 1024) + " KB). Try:\n" +
       "<code>git diff " + esc(fd.base || "") + " " + esc(fd.sha || "") + " -- " + esc(fd.file || "") + "</code></div>";
@@ -986,46 +1148,152 @@ function diffHtml(fd) {
     if (fd.binary) return '<div class="binary-note">Binary file — diff not shown.</div>';
     return '<div class="diff-empty">No content changes (pure rename, mode change, or empty file).</div>';
   }
-  var lang = langForFile(state.fileSel || "");
-  var rowTotal = 0;
-  fd.hunks.forEach(function (h) { rowTotal += h.rows.length; });
-  var hlOn = !!lang && rowTotal <= HL_ROW_CAP;
+  /* Render meta is frozen per file on first render: expansions keep the same
+     highlighting decision, and the highlight budget only shrinks. */
+  var meta = state.diffMeta[f.path];
+  if (!meta) {
+    var lang0 = langForFile(f.path);
+    var rowTotal = 0;
+    fd.hunks.forEach(function (h) { rowTotal += h.rows.length; });
+    var hl0 = !!lang0 && rowTotal <= HL_ROW_CAP;
+    meta = { lang: lang0, hlOn: hl0, hlBudget: hl0 ? HL_ROW_CAP - rowTotal : 0 };
+    state.diffMeta[f.path] = meta;
+  }
+  var content = state.fileContent[f.path];
+  var contentOk = content && content.ok;
+  renderCtx = { content: contentOk ? content : null, meta: meta };
+  var gaps = contentOk ? gapList(fd, content) : [];
+  var exp = state.ctxExp[f.path] || null;
   var html = ['<div class="diff">'];
+  var gi = 0;
   fd.hunks.forEach(function (h) {
+    /* gaps arrive in document order: optional file-head gap before the first
+       hunk, then one gap after each hunk (between hunks, or file tail) */
+    if (gi < gaps.length && gaps[gi].pos === "top") { html.push(gapHtml(gaps[gi], exp)); gi++; }
     html.push('<div class="hunk-head">@@ -' + h.oldStart + "," + h.oldCount + " +" + h.newStart + "," + h.newCount + " @@</div>");
-    h.rows.forEach(function (r) {
-      var cls = r.paired ? "r-pair" : r.oldText === null ? "r-add" : r.newText === null ? "r-del" : "r-ctx";
-      if (r.oldText === null && r.newText === null) cls = "r-gap";
-      var hlc = hlOn ? " hl" : "";
-      var oldCell, newCell;
-      var o = splitTail(r.oldText), n = splitTail(r.newText);
-      if (r.paired && r.oldText !== r.newText) {
-        var sp = wordSpans(o[0], n[0]);
-        if (sp) {
-          if (hlOn) {
-            /* highlight the whole line first, then wrap just the changed
-               range — re-lexing segments separately would mis-color tokens
-               that span a boundary (strings, comments) */
-            oldCell = wrapRange(hlLine(o[0], lang), sp.aPre.length, sp.aPre.length + sp.aMid.length, "w-del") + esc(o[1]);
-            newCell = wrapRange(hlLine(n[0], lang), sp.bPre.length, sp.bPre.length + sp.bMid.length, "w-add") + esc(n[1]);
-          } else {
-            oldCell = esc(sp.aPre) + '<mark class="w-del">' + esc(sp.aMid) + '</mark>' + esc(sp.aSuf) + esc(o[1]);
-            newCell = esc(sp.bPre) + '<mark class="w-add">' + esc(sp.bMid) + '</mark>' + esc(sp.bSuf) + esc(n[1]);
-          }
-        } else {
-          oldCell = cellHtml(o, lang, hlOn); newCell = cellHtml(n, lang, hlOn);
-        }
-      } else {
-        oldCell = cellHtml(o, lang, hlOn); newCell = cellHtml(n, lang, hlOn);
-      }
-      html.push('<div class="no no-o ' + cls + '">' + (r.oldNo == null ? "" : r.oldNo) + "</div>");
-      html.push('<div class="code old ' + cls + hlc + '">' + oldCell + "</div>");
-      html.push('<div class="no no-n ' + cls + '">' + (r.newNo == null ? "" : r.newNo) + "</div>");
-      html.push('<div class="code new ' + cls + hlc + '">' + newCell + "</div>");
-    });
+    h.rows.forEach(function (r) { html.push(diffRowHtml(r, meta.lang, meta.hlOn)); });
+    if (gi < gaps.length) { html.push(gapHtml(gaps[gi], exp)); gi++; }
   });
   html.push("</div>");
   return '<div class="diff-scroll">' + html.join("") + "</div>";
+}
+
+/* One side-by-side row (4 grid cells), shared by hunk rows and synthesized
+   context rows from collapsed regions. */
+function diffRowHtml(r, lang, hlOn) {
+  var cls = r.paired ? "r-pair" : r.oldText === null ? "r-add" : r.newText === null ? "r-del" : "r-ctx";
+  if (r.oldText === null && r.newText === null) cls = "r-gap";
+  var hlc = hlOn ? " hl" : "";
+  var oldCell, newCell;
+  var o = splitTail(r.oldText), n = splitTail(r.newText);
+  if (r.paired && r.oldText !== r.newText) {
+    var sp = wordSpans(o[0], n[0]);
+    if (sp) {
+      if (hlOn) {
+        /* highlight the whole line first, then wrap just the changed
+           range — re-lexing segments separately would mis-color tokens
+           that span a boundary (strings, comments) */
+        oldCell = wrapRange(hlLine(o[0], lang), sp.aPre.length, sp.aPre.length + sp.aMid.length, "w-del") + esc(o[1]);
+        newCell = wrapRange(hlLine(n[0], lang), sp.bPre.length, sp.bPre.length + sp.bMid.length, "w-add") + esc(n[1]);
+      } else {
+        oldCell = esc(sp.aPre) + '<mark class="w-del">' + esc(sp.aMid) + "</mark>" + esc(sp.aSuf) + esc(o[1]);
+        newCell = esc(sp.bPre) + '<mark class="w-add">' + esc(sp.bMid) + "</mark>" + esc(sp.bSuf) + esc(n[1]);
+      }
+    } else {
+      oldCell = cellHtml(o, lang, hlOn); newCell = cellHtml(n, lang, hlOn);
+    }
+  } else {
+    oldCell = cellHtml(o, lang, hlOn); newCell = cellHtml(n, lang, hlOn);
+  }
+  return '<div class="no no-o ' + cls + '">' + (r.oldNo == null ? "" : r.oldNo) + "</div>" +
+    '<div class="code old ' + cls + hlc + '">' + oldCell + "</div>" +
+    '<div class="no no-n ' + cls + '">' + (r.newNo == null ? "" : r.newNo) + "</div>" +
+    '<div class="code new ' + cls + hlc + '">' + newCell + "</div>";
+}
+
+/* ------------------------------------------------ collapsed context ----
+   The diff only carries hunks; the space between them (file head, gaps
+   between hunks, file tail) is reconstructed from the full file contents
+   fetched via the .../file endpoints. Each hidden region becomes a slim
+   bar: "+20" reveals twenty more lines toward the visible diff (middle
+   gaps grow 10 lines at both edges), "all" reveals the whole region. */
+var CTX_STEP = 20;
+var renderCtx = null; /* {content, meta} valid while rendering a diff */
+
+function splitLines(t) {
+  var a = t.split("\n");
+  if (a.length && a[a.length - 1] === "") a.pop(); /* trailing newline phantom */
+  return a;
+}
+
+/* Hidden regions of this diff, in document order. o0/n0 are the first
+   hidden old/new line numbers; src says which side indexes the text
+   (identical on both sides for context). Bottom gap needs content. */
+function gapList(fd, content) {
+  var hs = fd.hunks, out = [];
+  if (!hs.length) return out;
+  var first = hs[0];
+  var topN = Math.min(first.oldStart - 1, first.newStart - 1);
+  if (topN > 0) out.push({ idx: out.length, size: topN, o0: 1, n0: 1, pos: "top", src: "old" });
+  for (var i = 1; i < hs.length; i++) {
+    var p = hs[i - 1], c = hs[i];
+    var o0 = p.oldStart + p.oldCount;
+    var n0 = p.newStart + p.newCount;
+    var sz = Math.min(c.oldStart - o0, c.newStart - n0); /* both sides equal for context */
+    if (sz > 0) out.push({ idx: out.length, size: sz, o0: o0, n0: n0, pos: "mid", src: "old" });
+  }
+  if (content && content.new && content.new.length) {
+    var L = hs[hs.length - 1];
+    var oF = L.oldStart + L.oldCount, nF = L.newStart + L.newCount;
+    var szB = content.new.length - nF + 1;
+    if (content.old && content.old.length) szB = Math.min(szB, content.old.length - oF + 1);
+    if (szB > 0) out.push({ idx: out.length, size: szB, o0: oF, n0: nF, pos: "bot", src: "new" });
+  }
+  return out;
+}
+
+function gapRowsHtml(g, a, b, consume) {
+  var meta = renderCtx.meta, c = renderCtx.content, out = [];
+  for (var k = a; k < b; k++) {
+    var hlRow = false;
+    if (meta.hlOn) {
+      hlRow = meta.hlBudget > 0;
+      if (consume && hlRow) meta.hlBudget--;
+    }
+    var oldNo = g.o0 + k, newNo = g.n0 + k;
+    var text = (g.src === "old" ? c.old : c.new)[g.src === "old" ? oldNo - 1 : newNo - 1];
+    if (text === undefined) text = "";
+    out.push(diffRowHtml({ oldNo: oldNo, newNo: newNo, oldText: text, newText: text, paired: false }, meta.lang, hlRow));
+  }
+  return out.join("");
+}
+
+function gapArrow(g) { return g.pos === "top" ? "↑" : g.pos === "bot" ? "↓" : "↕"; }
+function gapWhere(g) { return g.pos === "top" ? " lines above" : g.pos === "bot" ? " lines below" : " lines between"; }
+function moreLabel(g, rem) {
+  if (g.pos === "mid") {
+    var s = Math.min(CTX_STEP / 2, Math.ceil(rem / 2)), t = Math.min(CTX_STEP / 2, rem - s);
+    return "+" + (s + t);
+  }
+  return "+" + Math.min(CTX_STEP, rem);
+}
+function gapBarHtml(g, st) {
+  var rem = g.size - st.u - st.l;
+  return '<div class="gapbar" data-gap="' + g.idx + '" data-u="' + st.u + '" data-l="' + st.l + '">' +
+    '<span class="gap-info">' + gapArrow(g) + " " + rem + gapWhere(g) + "</span>" +
+    '<button class="gap-btn" data-act="more" title="reveal more lines">' + moreLabel(g, rem) + "</button>" +
+    '<button class="gap-btn" data-act="all" title="reveal this whole region">all</button></div>';
+}
+function gapHtml(g, exp) {
+  var st = (exp && exp.gaps && exp.gaps[g.idx]) || { u: 0, l: 0 };
+  if (exp && exp.whole) st = { u: g.size, l: 0 };
+  st = { u: Math.min(st.u || 0, g.size), l: Math.min(st.l || 0, g.size) };
+  if (st.u + st.l > g.size) st = { u: g.size, l: 0 };
+  var out = [];
+  if (st.u > 0) out.push(gapRowsHtml(g, 0, st.u, false));
+  if (st.u + st.l < g.size) out.push(gapBarHtml(g, st));
+  if (st.l > 0) out.push(gapRowsHtml(g, g.size - st.l, g.size, false));
+  return out.join("");
 }
 
 /* Split off the parser-appended "\ No newline at end of file" tail (joined by a real \n):

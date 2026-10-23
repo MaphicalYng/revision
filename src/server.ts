@@ -21,6 +21,8 @@ import {
   fileDiff,
   workStatus,
   workDiffText,
+  workFileText,
+  blobAtRev,
   DIFF_CHAR_CAP,
 } from "./git.js";
 import { renderPage } from "./page.js";
@@ -224,6 +226,26 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         });
         return;
       }
+      g = m(/^\/api\/repo\/([^/]+)\/work\/file$/);
+      if (req.method === "GET" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const file = safeFile(url.searchParams.get("file") ?? "");
+        const st = await workStatus(rp);
+        const meta = st.files.find((f) => f.path === file);
+        if (!meta) throw new HttpError(`file not among working tree changes: ${file}`, 404);
+        const none = { text: null, tooLarge: false } as { text: string | null; tooLarge: boolean };
+        const oldSide = !st.hasHead || meta.untracked ? none : await blobAtRev(rp, "HEAD", meta.oldPath ?? file);
+        let newSide = none;
+        if (!meta.untracked && meta.code[1] !== "D") newSide = await workFileText(rp, file);
+        json(res, 200, {
+          file,
+          old: oldSide.text,
+          new: newSide.text,
+          tooLarge: oldSide.tooLarge || newSide.tooLarge,
+        });
+        return;
+      }
       g = m(/^\/api\/repo\/([^/]+)\/commit\/([0-9a-f]+)\/diff$/i);
       if (req.method === "GET" && g) {
         const rp = await repoPath(res, decodeURIComponent(g[1]));
@@ -272,6 +294,29 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
           bytes: raw.length,
           counts: fd ? countChanges(fd.hunks) : { additions: 0, deletions: 0 },
           hunks,
+        });
+        return;
+      }
+
+      g = m(/^\/api\/repo\/([^/]+)\/commit\/([0-9a-f]+)\/file$/i);
+      if (req.method === "GET" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const sha = safeRev(g[2]);
+        const file = safeFile(url.searchParams.get("file") ?? "");
+        const detail = await commitDetail(rp, sha); // parents + base for this sha
+        const meta = detail.files.find((f) => f.path === file);
+        if (!meta) throw new HttpError(`file not in commit: ${file}`, 404);
+        const none = { text: null, tooLarge: false } as { text: string | null; tooLarge: boolean };
+        const oldSide = detail.diffBase && meta.status !== "added"
+          ? await blobAtRev(rp, detail.diffBase, meta.oldPath ?? file)
+          : none;
+        const newSide = meta.status === "deleted" ? none : await blobAtRev(rp, sha, file);
+        json(res, 200, {
+          file,
+          old: oldSide.text,
+          new: newSide.text,
+          tooLarge: oldSide.tooLarge || newSide.tooLarge,
         });
         return;
       }

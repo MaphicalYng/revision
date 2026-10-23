@@ -108,6 +108,13 @@ const CSS = `
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --top-h: 52px;
+
+  /* ---------- motion ---------- */
+  /* strong ease-out: built-in easings are too weak for deliberate UI motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-fast: 120ms;   /* press feedback, exits */
+  --dur-base: 160ms;   /* entrances, carets */
+  --dur-slow: 200ms;   /* toasts */
 }
 
 [data-theme="dark"] {
@@ -175,15 +182,29 @@ body {
 .dd-btn:hover { border-color: var(--border-hover); }
 .dd-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dd-caret { color: var(--text-3); flex: none; transition: transform 0.15s ease; }
-.dd.open .dd-caret { transform: rotate(180deg); }
-.dd-menu[hidden] { display: none; }
+.dd-caret { color: var(--text-3); flex: none; transition: transform var(--dur-fast) var(--ease-out); }
+.dd.open .dd-caret { transform: rotate(180deg); transition-duration: var(--dur-base); }
+.dd-menu[hidden] { display: none; pointer-events: none; opacity: 0; transform: scale(0.96); }
 .dd-menu {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
   min-width: 100%; width: max-content; max-width: 360px;
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28); padding: 6px;
   display: flex; flex-direction: column;
+  /* grows out of the trigger's corner, not out of its own centre */
+  transform-origin: top left;
+  opacity: 1;
+  transform: scale(1);
+  /* exit is the base state: 120ms, allow-discrete keeps it painted while display flips */
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    display var(--dur-fast) allow-discrete;
+}
+/* enter: 160ms, and the caret tracks it instead of finishing early */
+.dd-menu:not([hidden]) { transition-duration: var(--dur-base); }
+@starting-style {
+  .dd-menu:not([hidden]) { opacity: 0; transform: scale(0.96); }
 }
 .dd-search {
   height: 28px; padding: 0 9px; margin-bottom: 4px; flex: none;
@@ -313,7 +334,7 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .t-row:hover { background: var(--panel-2); color: var(--text); }
 .t-file.on { background: var(--accent-dim); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
 .t-dir { color: var(--text); font-weight: 600; }
-.tw { display: grid; place-items: center; width: 12px; flex: none; color: var(--text-3); transition: transform 0.12s ease; }
+.tw { display: grid; place-items: center; width: 12px; flex: none; color: var(--text-3); }
 .tw svg { display: block; }
 .t-dir.open .tw { transform: rotate(90deg); }
 .t-name { flex: none; }
@@ -381,6 +402,10 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 }
 .gapbar .gap-btn:hover { color: var(--text); background: var(--panel-3); }
 .gapbar .gap-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* ---------- press feedback ---------- */
+.dd-btn, .ibtn, .gapbar .gap-btn, .chip.sha-chip { transition: transform var(--dur-fast) var(--ease-out); }
+.dd-btn:active, .ibtn:active, .gapbar .gap-btn:active, .chip.sha-chip:active { transform: scale(0.97); }
 mark.w-del { background: var(--del-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; padding: 0 1px; }
 
@@ -410,7 +435,7 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   border: 1px solid var(--border); border-radius: 9px;
   padding: 9px 16px; font-size: 13px;
   opacity: 0; pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
   box-shadow: 0 8px 24px rgba(0,0,0,0.45);
   max-width: 80vw;
 }
@@ -430,6 +455,40 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   .diffbox { border-radius: 0 0 10px 10px; }
   html.side-collapsed .side { display: flex; }
   html.side-collapsed .rail { display: none; }
+}
+
+@keyframes ctx-in { from { opacity: 0; } }
+.ctx-in { animation: ctx-in var(--dur-fast) var(--ease-out) both; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.ibtn.spin svg { animation: spin 400ms linear 1 both; }
+@keyframes pulse { 50% { opacity: 0.55; } }
+/* .dd-btn has no icon of its own — its only svg IS the caret, whose rotate is
+   state, not progress. Fade the trigger instead of fighting that transform. */
+.dd-btn.spin { animation: pulse 400ms var(--ease-out) 1 both; }
+
+@keyframes pop-in { from { opacity: 0; transform: scale(0.9); } }
+.empty .big.pop { animation: pop-in 220ms var(--ease-out) both; }
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  /* rotation still encodes state; remove the time, keep the end angle */
+  .dd-caret, .tw { transition: none; }
+  /* dropdown: keep the fade (it is what makes it feel anchored), drop the scale */
+  .dd-menu { transition: opacity var(--dur-fast) linear, display var(--dur-fast) allow-discrete; transform: none; }
+  .dd-menu:not([hidden]) { transition-duration: var(--dur-fast); }
+  .dd-menu[hidden] { transform: none; }
+  @starting-style {
+    .dd-menu:not([hidden]) { opacity: 0; transform: none; }
+  }
+  /* toast: keep the fade, drop the 8px slide and the centring transform stays as the rest state */
+  .toast { transition: opacity var(--dur-slow) linear; transform: translateX(-50%); }
+  .toast.show { transform: translateX(-50%); }
+  /* press feedback: keep the click, drop the squeeze */
+  .dd-btn:active, .ibtn:active, .gapbar .gap-btn:active, .chip.sha-chip:active { transform: none; }
+  /* newly revealed context rows: appear instantly */
+  .ctx-in { animation: none; }
+  .empty .big.pop { animation: none; }
 }
 `;
 
@@ -562,13 +621,13 @@ var repoDd = createDropdown("repoDd", {
   onPick: function (v) { openRepo(v, null, null); }
 });
 var branchDd = createDropdown("branchDd", {
-  onPick: function (v) { state.branch = v; loadCommits(0, null); loadWork(); }
+  onPick: function (v) { state.branch = v; spinWhile($("branchDdBtn"), loadCommits(0, null)); loadWork(); }
 });
 
 var state = {
   repos: [], repo: null, branches: [], branch: null,
   commits: [], hasMore: false, loading: false,
-  commit: null, files: [], fileSel: null, fileCache: {}, filter: "",
+  commit: null, pendingSha: null, files: [], fileSel: null, fileCache: {}, filter: "",
   work: null, view: "commit", treeOpen: {}, fileQuery: "",
   fileContent: {}, ctxExp: {}, diffMeta: {}
 };
@@ -650,6 +709,7 @@ async function boot() {
 }
 
 async function openRepo(id, branchWanted, commitWanted) {
+  commitSeq++;
   state.repo = id; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit"; state.treeOpen = {};
   writeHash();
   try {
@@ -675,7 +735,7 @@ async function loadCommits(skip, commitWanted) {
   if (state.loading) return; state.loading = true;
   writeHash();
   var list = $("commitList");
-  if (skip === 0) { state.commits = []; list.innerHTML = '<div class="diff-empty">Loading…</div>'; }
+  if (skip === 0) { state.commits = []; state.pendingSha = null; list.innerHTML = '<div class="diff-empty">Loading…</div>'; }
   $("moreBtn").hidden = true;
   try {
     var data = await api("/api/repo/" + encodeURIComponent(state.repo) + "/log?branch=" + encodeURIComponent(state.branch || "HEAD") + "&skip=" + skip);
@@ -686,7 +746,7 @@ async function loadCommits(skip, commitWanted) {
     if (skip === 0) {
       var target = commitWanted && data.commits.some(function (c) { return c.sha === commitWanted; })
         ? commitWanted : (data.commits[0] ? data.commits[0].sha : null);
-      if (target) selectCommit(target);
+      if (target) await selectCommit(target);
       else mainEmpty("∅", "No commits on this branch", "This branch has no commits yet.");
     }
   } catch (e) {
@@ -722,23 +782,28 @@ function renderCommits() {
   }).join("") || '<div class="diff-empty">No commits match.</div>';
 }
 
+var commitSeq = 0;
+
 async function selectCommit(sha) {
   if (!sha) return;
-  state.view = "commit";
-  state.commit = null; state.files = []; state.fileSel = null; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.treeOpen = {}; state.fileQuery = "";
-  renderCommits();
-  var main = $("main");
-  main.innerHTML = '<div class="empty"><div><div class="big">…</div><p>Loading commit…</p></div></div>';
+  var seq = ++commitSeq;
+  state.pendingSha = sha;
   var detail;
   try {
     detail = await api("/api/repo/" + encodeURIComponent(state.repo) + "/commit/" + encodeURIComponent(sha));
   } catch (e) {
+    if (seq !== commitSeq) return;          /* a newer selection already won */
+    state.commit = null; state.files = []; state.fileSel = null; state.pendingSha = null;
+    renderCommits();
     mainEmpty("⚠️", "Failed to load commit", esc(e.message));
     return;
   }
+  if (seq !== commitSeq) return;            /* a newer selection already won */
+  state.view = "commit";
   state.commit = detail;
   state.files = detail.files;
   state.fileSel = detail.files.length ? detail.files[0].path : null;
+  state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.treeOpen = {}; state.fileQuery = "";
   writeHash();
   renderDetail();
   renderCommits();
@@ -757,6 +822,8 @@ async function loadWork() {
 
 async function selectWork() {
   if (!state.repo) return;
+  commitSeq++;
+  state.pendingSha = null;
   state.view = "work";
   state.commit = null; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.files = []; state.fileSel = null; state.treeOpen = {}; state.fileQuery = "";
   renderCommits();
@@ -774,7 +841,13 @@ async function selectWork() {
     else if (f.code.indexOf("A") !== -1) st = "added";
     return { path: f.path, oldPath: f.oldPath || undefined, status: st, binary: f.binary, additions: f.additions, deletions: f.deletions };
   });
-  if (!files.length) { mainEmpty("&#10003;", "No uncommitted changes", "The working tree is clean."); return; }
+  if (!files.length) {
+    mainEmpty("&#10003;", "No uncommitted changes", "The working tree is clean.");
+    /* the only moment in this UI that is allowed to be a small delight */
+    var glyph = document.querySelector(".empty .big");
+    if (glyph) glyph.classList.add("pop");
+    return;
+  }
   state.files = files;
   state.fileSel = files[0].path;
   renderWorkDetail();
@@ -983,7 +1056,9 @@ async function renderDiff() {
     return;
   }
 
-  box.innerHTML = head + '<div class="diff-empty">Loading diff…</div>';
+  /* keep the previous diff on screen while the next one loads:
+     the swap below repaints it in one frame, so there is no blank flash */
+  if (!box.querySelector(".diff-scroll")) box.innerHTML = head + '<div class="diff-empty">Loading diff…</div>';
   var data;
   try {
     var url = state.view === "work"
@@ -1068,7 +1143,11 @@ function insertGapRows(bar, g, a, b, where) {
   tmp.innerHTML = gapRowsHtml(g, a, b, true);
   var nodes = Array.prototype.slice.call(tmp.children);
   var ref = where === "before" ? bar : bar.nextSibling;
-  for (var i = 0; i < nodes.length; i++) bar.parentNode.insertBefore(nodes[i], ref);
+  for (var i = 0; i < nodes.length; i++) {
+    /* the one thing on this screen that appears without warning */
+    nodes[i].classList.add("ctx-in");
+    bar.parentNode.insertBefore(nodes[i], ref);
+  }
 }
 
 function expandGapFromBar(f, bar, act) {
@@ -1434,6 +1513,18 @@ function mainEmpty(big, title, bodyHtml) {
   $("main").innerHTML = '<div class="empty"><div><div class="big">' + big + "</div><h2>" + esc(title) + "</h2><p>" + bodyHtml + "</p></div></div>";
 }
 
+/* A local request can finish in 3ms; without a floor the icon would twitch instead of turn. */
+function spinWhile(btn, p) {
+  if (!btn) return;
+  var started = Date.now();
+  btn.classList.add("spin");
+  function stop() {
+    var wait = Math.max(0, 400 - (Date.now() - started));
+    setTimeout(function () { btn.classList.remove("spin"); }, wait);
+  }
+  p.then(stop, stop);
+}
+
 function bindChrome() {
   applyTheme(document.documentElement.getAttribute("data-theme") || "light");
   $("themeBtn").onclick = toggleTheme;
@@ -1443,8 +1534,9 @@ function bindChrome() {
     if (e.target && e.target.id === "fileFilter") { state.fileQuery = e.target.value; renderTree(); }
   });
   $("refreshBtn").onclick = function () {
-    if (state.repo) openRepo(state.repo, state.branch, state.commit ? state.commit.sha : null);
-    else boot();
+    spinWhile(this, state.repo
+      ? openRepo(state.repo, state.branch, state.commit ? state.commit.sha : null)
+      : boot());
   };
   $("filter").oninput = function () { state.filter = this.value; renderCommits(); };
   $("moreBtn").onclick = function () { loadCommits(state.commits.length, null); };
@@ -1457,7 +1549,8 @@ function bindChrome() {
   document.addEventListener("keydown", function (e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    var idx = state.commits.findIndex(function (c) { return state.commit && c.sha === state.commit.sha; });
+    var curSha = state.pendingSha || (state.commit && state.commit.sha);
+    var idx = state.commits.findIndex(function (c) { return c.sha === curSha; });
     if (e.key === "j" || e.key === "k") {
       var next = e.key === "j" ? idx + 1 : idx - 1;
       if (next < 0) next = 0;

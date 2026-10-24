@@ -83,6 +83,7 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 - **Root commits** — handled via `git diff-tree --root` / `git show`
 - **Hash routing** — `#r=<repo>&b=<branch>&c=<sha>` is synced as you navigate, so any view is a shareable/bookmarkable URL
 - **Security** — token authentication on by default (random token per start, printed as a ready URL; `--token` to fix your own, `--no-auth` to opt out); constant-time comparison; repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls go through `execFile` argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
+- **Server status & build version** — the header shows connected/disconnected state using an authenticated 10-second health check plus browser network events; the footer shows the tool's build date and source Commit ID, embedded at build time so npm installs do not need the tool's `.git` directory
 
 ## Architecture
 
@@ -100,12 +101,14 @@ bin/
   revision.js  npm bin wrapper -> dist/cli.js
 scripts/
   demo.mjs     generates sample repos under /tmp/revision-demo
+  build-version.mjs  embeds the build date and tool Commit ID into src/build-info.ts
 ```
 
 Data flow:
 
 ```
 page --GET /api/repos----------------> server --fs scan------------> repo list
+page --GET /api/health----------------> server (authenticated liveness check)
 page --GET /api/repo/:id/log?branch--> server --git log------------> commit rows
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> file list + stats
 page --GET .../diff?file=------------> server --git diff + parse---> { hunks: [{ rows }] }
@@ -119,7 +122,7 @@ Line-number alignment is a pairing problem, not a rendering problem: within each
 
 ```bash
 npm install
-npm run build          # tsc -> dist/
+npm run build          # embed build date + Commit ID, then tsc -> dist/
 npm run demo           # create sample repos in /tmp/revision-demo
 node bin/revision.js /tmp/revision-demo
 ```

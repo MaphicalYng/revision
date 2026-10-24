@@ -150,6 +150,11 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
       }
 
       // ---- API ----
+      if (req.method === "GET" && p === "/api/health") {
+        json(res, 200, { ok: true });
+        return;
+      }
+
       if (req.method === "GET" && p === "/api/repos") {
         const found = await listRepos(root); // fresh scan for accurate metadata
         json(res, 200, { repos: found });

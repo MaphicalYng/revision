@@ -26,7 +26,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/build-version.mjs && tsc -p tsconfig.json",
     "demo": "node scripts/demo.mjs",
     "prepublishOnly": "npm run build"
   },

@@ -6,6 +6,7 @@
  */
 
 import { HLJS_SRC } from "./hljs.js";
+import { BUILD_INFO } from "./build-info.js";
 
 /* Tab icon: brand glyph as a theme-adaptive SVG (accent stroke follows the OS
    light/dark setting), PNG screenshot of the same glyph as fallback for browsers
@@ -46,6 +47,7 @@ export function renderPage(): string {
     </div>
   </div>
   <div class="sp"></div>
+  <div class="connection" id="connectionStatus" data-state="checking" role="status" aria-live="polite" aria-atomic="true" title="Connecting to server"><span class="connection-dot" aria-hidden="true"></span><span id="connectionText">Connecting</span></div>
   <button id="themeBtn" class="ibtn" title="Toggle theme" aria-label="toggle theme"></button>
   <button id="refreshBtn" class="ibtn" title="Refresh" aria-label="refresh"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
 </header>
@@ -64,6 +66,7 @@ export function renderPage(): string {
   </div>
   <main class="main" id="main"></main>
 </div>
+<footer class="version" aria-label="Build information">Built <time datetime="${BUILD_INFO.buildDate}">${BUILD_INFO.buildDate.slice(0, 10)}</time><span aria-hidden="true">·</span><code title="${BUILD_INFO.commitId}">${BUILD_INFO.commitId.slice(0, 12)}</code></footer>
 <div class="toast" id="toast" role="status"></div>
 <script>${HLJS_SRC}</script>
 <script>${JS}</script>
@@ -228,6 +231,10 @@ body {
 .dd-sub { margin-left: auto; padding-left: 16px; color: var(--text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
 .dd-empty { padding: 12px; color: var(--text-3); font-size: 12px; text-align: center; }
 .sp { flex: 1; }
+.connection { display: flex; align-items: center; gap: 7px; flex: none; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.connection-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text-3); }
+.connection[data-state="online"] .connection-dot { background: var(--add-num); }
+.connection[data-state="offline"] .connection-dot { background: var(--del-num); }
 .ibtn {
   display: grid; place-items: center;
   width: 32px; height: 32px;
@@ -239,6 +246,12 @@ body {
 
 /* ---------- layout ---------- */
 .body { flex: 1; display: flex; min-height: 0; }
+.version {
+  height: 26px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  padding: 0 14px; background: var(--panel); border-top: 1px solid var(--border);
+  color: var(--text-3); font-size: 11px;
+}
+.version code { color: var(--text-2); font: 11px var(--mono); }
 .side {
   width: 320px; flex: none;
   display: flex; flex-direction: column;
@@ -433,7 +446,7 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 
 /* ---------- toast ---------- */
 .toast {
-  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(8px);
+  position: fixed; left: 50%; bottom: 38px; transform: translateX(-50%) translateY(8px);
   background: var(--panel-3); color: var(--text);
   border: 1px solid var(--border); border-radius: 9px;
   padding: 9px 16px; font-size: 13px;
@@ -458,6 +471,14 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   .diffbox { border-radius: 0 0 10px 10px; }
   html.side-collapsed .side { display: flex; }
   html.side-collapsed .rail { display: none; }
+}
+
+@media (max-width: 700px) {
+  .top { gap: 6px; padding: 0 8px; }
+  .brand { margin-right: 0; }
+  .brand span { display: none; }
+  .dd-btn { max-width: 140px; }
+  .connection { gap: 5px; font-size: 11px; }
 }
 
 @keyframes ctx-in { from { opacity: 0; } }
@@ -644,10 +665,49 @@ function toast(msg) {
   var t = $("toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove("show"); }, 2600);
 }
+var connectionState = "";
+var connectionTimer = null;
+var connectionChecking = false;
+function setConnectionState(next) {
+  if (connectionState === next) return;
+  connectionState = next;
+  var labels = { checking: "Connecting", online: "Connected", offline: "Disconnected" };
+  var titles = { checking: "Connecting to server", online: "Server connected", offline: "Server disconnected" };
+  var el = $("connectionStatus");
+  el.setAttribute("data-state", next);
+  el.title = titles[next];
+  $("connectionText").textContent = labels[next];
+}
+async function checkConnection() {
+  if (connectionChecking) return;
+  connectionChecking = true;
+  try { await api("/api/health"); } catch (e) { /* api() updates the connection state */ }
+  finally {
+    connectionChecking = false;
+    clearTimeout(connectionTimer);
+    connectionTimer = setTimeout(checkConnection, 10000);
+  }
+}
+function startConnectionMonitor() {
+  window.addEventListener("online", function () {
+    clearTimeout(connectionTimer);
+    setConnectionState("checking");
+    checkConnection();
+  });
+  window.addEventListener("offline", function () {
+    clearTimeout(connectionTimer);
+    setConnectionState("offline");
+  });
+  setConnectionState("checking");
+  checkConnection();
+}
 async function api(path) {
   var headers = { "Accept": "application/json" };
   if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
-  var r = await fetch(path, { headers: headers });
+  var r;
+  try { r = await fetch(path, { headers: headers }); }
+  catch (e) { setConnectionState("offline"); throw e; }
+  setConnectionState("online");
   var body = null;
   try { body = await r.json(); } catch (e) { /* non-json */ }
   if (r.status === 401) {
@@ -1580,5 +1640,6 @@ function scrollCommitIntoView(sha) {
   if (el) el.scrollIntoView({ block: "nearest" });
 }
 
+startConnectionMonitor();
 boot();
 `;

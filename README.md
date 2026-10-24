@@ -25,14 +25,16 @@ Visual reference: [Linear](https://linear.app)-style dark UI, [GitHub Dark](http
 
 ## Install
 
+Requires Node.js >=18 and Git on `PATH`.
+
 ```bash
-npm install -g revision
+npm install -g @maphicalyng/revision
 ```
 
 Or run straight away with npx (compiles on demand are not needed — the published package ships plain JS):
 
 ```bash
-npx revision ~/code
+npx @maphicalyng/revision ~/code
 ```
 
 ## Usage
@@ -44,6 +46,8 @@ revision [dir]            # serve repos under `dir` (default: cwd)
   --token <secret>        # access token (default: random token, printed at startup)
   --no-auth               # disable token authentication (loopback only!)
   --no-open               # do not open the browser
+  -v, --version           # print the package version
+  -h, --help              # print usage
 ```
 
 **Token authentication is on by default.** Every start generates a random token and prints a ready-to-use URL:
@@ -55,7 +59,7 @@ revision ~/code
 
 The page carries `?token=` in its URL and forwards it as an `Authorization: Bearer` header on every API call; API clients can pass either form. Without a valid token the server answers `401` for both the page and the API. Comparison is constant-time. Pass `--token <secret>` to choose your own (handy for bookmarks or multiple clients), or `--no-auth` only when the bind address is loopback / behind your own reverse-proxy auth.
 
-`dir` itself shows up when it is a git repository (so `revision ~/code/app` works), and so does every immediate subdirectory of `dir` that contains a `.git` entry. Click a commit on the left, switch files along the top, read the diff.
+`dir` itself shows up when it is a git repository (so `revision ~/code/app` works), and so does every immediate subdirectory of `dir` that contains a `.git` entry. Click a commit on the left, select files in the tree beside the diff, and read the diff.
 
 ### Keyboard
 
@@ -65,23 +69,23 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 
 ## Features
 
-- **Repo discovery** — the target directory itself when it is a repo, plus one level deep, worktrees and submodules included (`*.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
+- **Repo discovery** — the target directory itself when it is a repo, plus one level deep, worktrees and submodules included (a `.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
 - **Branches** — local branches with the current one preselected; remote branches under an optgroup
 - **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking
 - **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type
 - **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", client-side filter box (matches subject, author, and SHA — short or full 40-char, any prefix length), merge-commit markers, relative timestamps
-- **File tree** — changed files rendered as an expandable directory tree beside the diff (not a tab strip), with per-file and per-directory `+x −y` counts and `A`/`M`/`D`/`R` status badges; the chain to the selected file auto-expands, everything else starts collapsed
+- **File tree** — changed files rendered as an expandable directory tree beside the diff (not a tab strip), with per-file and per-directory `+x −y` counts and `A`/`M`/`D`/`R`/`U` status badges; the chain to the selected file auto-expands, everything else starts collapsed
 - **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs, unborn-branch support
-- **Commit detail** — full message body, author, exact date, copyable SHA, aggregate `files changed / +ins / −del` stats
+- **Commit detail** — full message body, author, exact date, copyable SHA and file paths, aggregate `files changed / +ins / −del` stats
 - **Side-by-side diff** — the old file on the left, the new file on the right, each with its own line numbers; deletion/addition runs pair row-by-row so both columns stay aligned; unpaired leftovers render with an empty opposite cell
-- **Syntax highlighting** — diff rows are highlighted per file extension (37 languages via a vendored [highlight.js](https://highlightjs.org) — no CDN, no extra dependency, still one self-contained HTML page); GitHub-light/dark token palettes that follow the theme toggle; word-level change marks overlay the highlighted line so strings and comments spanning a change keep their colors; files above 5000 diff rows skip highlighting to stay fast
+- **Syntax highlighting** — diff rows are highlighted per file extension (32 extension-mapped languages from the vendored 37-language [highlight.js](https://highlightjs.org) common bundle — no CDN, no extra dependency, still one self-contained HTML page); GitHub-light/dark token palettes that follow the theme toggle; word-level change marks overlay the highlighted line so strings and comments spanning a change keep their colors; files above 5000 diff rows skip highlighting to stay fast
 - **Word-level highlights** — paired changed lines are split into common-prefix / changed-middle / common-suffix token spans so only what actually changed lights up
 - **Hunk headers** — `@@ -a,b +c,d @@` separators between change blocks
 - **Collapsible context** — the space above, between, and below hunks renders as slim bars (`↑ 46 lines above [+20] [all]`); `+20` reveals twenty more lines toward the diff, middle gaps grow 10 lines per edge, `all` opens the whole region; a corners button in the diff header expands the **entire file** (and collapses back). Expansion is surgical DOM insertion — no re-render, scroll position never jumps; revealed rows reuse the same syntax highlighting with the 5000-row budget shared across hunk and revealed rows
-- **Binary & oversized files** — detected and shown as notices instead of hanging the page (diffs above ~1.5 MB are refused with a copy-pasteable `git diff` command)
+- **Binary & oversized files** — detected and shown as notices instead of hanging the page (diffs above ~1.5 MB are refused with a copy-pasteable `git diff` command); files over 1,000,000 bytes still show hunks, but collapsed-context and whole-file expansion are unavailable
 - **Merge commits** — diff computed against the first parent, with a note in the header
 - **Root commits** — handled via `git diff-tree --root` / `git show`
-- **Hash routing** — `#r=<repo>&b=<branch>&c=<sha>` is synced as you navigate, so any view is a shareable/bookmarkable URL
+- **Hash routing** — `#r=<repo>&b=<branch>&c=<sha>` is synced as you navigate, so repository, branch, and commit navigation is shareable/bookmarkable
 - **Security** — token authentication on by default (random token per start, printed as a ready URL; `--token` to fix your own, `--no-auth` to opt out); constant-time comparison; repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls go through `execFile` argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
 - **Server status & build version** — the header shows connected/disconnected state using an authenticated 10-second health check plus browser network events; the footer shows the tool's build date and source Commit ID, embedded at build time so npm installs do not need the tool's `.git` directory
 
@@ -108,11 +112,15 @@ Data flow:
 
 ```
 page --GET /api/repos----------------> server --fs scan------------> repo list
+page --GET /api/repo/:id/branches----> server --git branch---------> local + remote branches
 page --GET /api/health----------------> server (authenticated liveness check)
 page --GET /api/repo/:id/log?branch--> server --git log------------> commit rows
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> file list + stats
+page --GET /api/repo/:id/work--------> server --git status/diff-----> working-tree files + stats
 page --GET .../diff?file=------------> server --git diff + parse---> { hunks: [{ rows }] }
-page --GET .../file?file=-------------> server --git show/cat-file---> { old, new } full texts (powers collapsed context)
+page --GET .../work/diff?file=-------> server --git diff + parse---> working-tree hunks
+page --GET .../file?file=-------------> server --git cat-file/fs read--> { old, new } full texts (powers collapsed context)
+page --GET .../work/file?file=-------> server --git show/fs read------> working-tree full texts
 page renders rows in a 4-column grid: [old #][old code][new #][new code]
 ```
 

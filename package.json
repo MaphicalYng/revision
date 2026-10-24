@@ -1,5 +1,5 @@
 {
-  "name": "revision",
+  "name": "@maphicalyng/revision",
   "version": "0.1.0",
   "description": "Zero-dependency web UI for browsing local git repos: branches, commit history, and side-by-side diffs with aligned line numbers",
   "type": "module",

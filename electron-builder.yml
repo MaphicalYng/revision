@@ -1,5 +1,6 @@
 appId: com.maphicalyng.revision
 productName: revision
+executableName: revision
 
 # dist/ is the TypeScript output, so installer artifacts use a separate directory.
 directories:

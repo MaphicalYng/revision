@@ -44,6 +44,14 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
+  "Content-Security-Policy":
+    "default-src 'self'; " +
+    "connect-src 'self'; " +
+    "img-src 'self' data:; " +
+    "object-src 'none'; " +
+    "base-uri 'none'; " +
+    "style-src 'unsafe-inline'; " +
+    "script-src 'unsafe-inline'",
 };
 
 export async function startServer(opts: ServerOptions): Promise<{ server: http.Server; url: string }> {
@@ -332,23 +340,49 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
     }
   });
 
-  // Try the requested port, then walk upward until one is free.
-  let port = opts.port;
-  await new Promise<void>((resolve, reject) => {
-    const onError = (err: NodeJS.ErrnoException) => {
-      if (err.code === "EADDRINUSE" && port < opts.port + 20) {
-        port += 1;
+  // Fixed ports retain the CLI's bounded upward scan; port 0 is a single
+  // OS-assigned listen attempt for isolated desktop sessions.
+  async function listenOnce(port: number): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = (): void => {
+        server.removeListener("error", onError);
+        server.removeListener("listening", onListening);
+      };
+      const onError = (error: Error): void => {
+        cleanup();
+        reject(error);
+      };
+      const onListening = (): void => {
+        cleanup();
+        resolve();
+      };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      try {
         server.listen(port, opts.host);
-      } else {
-        reject(err);
+      } catch (error) {
+        cleanup();
+        reject(error);
       }
-    };
-    server.once("error", onError);
-    server.listen(port, opts.host, () => {
-      server.removeListener("error", onError);
-      resolve();
     });
-  });
+  }
 
-  return { server, url: `http://${opts.host}:${port}` };
+  let candidate = opts.port;
+  for (;;) {
+    try {
+      await listenOnce(candidate);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const canRetry = opts.port > 0 && code === "EADDRINUSE" && candidate < opts.port + 20;
+      if (!canRetry) throw error;
+      candidate += 1;
+    }
+  }
+
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("HTTP server has no TCP address after listening");
+  }
+  return { server, url: `http://${opts.host}:${address.port}` };
 }

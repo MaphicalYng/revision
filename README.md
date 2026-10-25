@@ -61,11 +61,58 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 
 `dir` itself shows up when it is a git repository (so `revision ~/code/app` works), and so does every immediate subdirectory of `dir` that contains a `.git` entry. Click a commit on the left, select files in the tree beside the diff, and read the diff.
 
+The desktop app is an additional way to run the same UI. The CLI/Web workflow remains available: port 4777 is still the default, and `revision` still opens your browser unless `--no-open` is passed.
+
 ### Keyboard
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | next / previous commit in the list |
+
+## Desktop
+
+The desktop build is a standalone application for each platform:
+
+| Platform | Package |
+| --- | --- |
+| macOS | DMG containing a `.app`, arm64 and x64 |
+| Windows | NSIS installer, x64 |
+| Linux | AppImage, x64 |
+
+Launch the app directly: Electron/Chromium and the Node runtime are included, so no system Node.js, npm, terminal, or external browser is needed. **Git is not bundled.** Install Git separately and make sure the `git` executable is available on `PATH`; a GUI-launched app may inherit a different `PATH` from your terminal. If Git is missing or cannot run, the app shows a native error with **Retry**.
+
+On first launch the app opens your home directory. Later launches restore the last successfully opened folder. **Open Folder…** uses the native directory picker, and **Open Recent** keeps up to 10 folders and includes **Clear Recent**. Folder discovery is the same as the CLI: the selected folder itself is included when it is a git repository, as are its direct subdirectories containing a `.git` entry. Switching folders does not ask for confirmation because revision is read-only.
+
+### Desktop keyboard shortcuts
+
+| Action | macOS | Windows / Linux |
+| --- | --- | --- |
+| Open Folder… | `⌘O` | `Ctrl+O` |
+| Refresh data (not a full-page reload) | `⌘R` | `Ctrl+R` |
+| Toggle Commit List | `⌘B` | `Ctrl+B` |
+| Filter Commits | `⌘F` | `Ctrl+F` |
+| Filter Changed Files | `⇧⌘F` | `Ctrl+Shift+F` |
+| Next / previous commit | `j` / `k` | `j` / `k` |
+| Close / Quit | `⌘W` / `⌘Q` | System standard |
+| Undo, redo, cut, copy, paste, select all | System standard | System standard |
+
+### Window and layout
+
+Window size, position, and maximized state, the light/dark theme, the commit-list collapsed state, and both pane widths persist across launches. Drag a separator to resize its pane, or focus the separator and use the left/right arrow keys. Double-click a separator to restore its default width.
+
+| Pane | Adjustable width | Default |
+| --- | --- | --- |
+| Commit list | 240–420 px | 320 px |
+| Changed-file tree | 200–380 px | 264 px |
+
+### Building desktop packages
+
+```bash
+npm run dev:desktop   # build and launch the Electron app
+npm run dist:desktop  # build local packages without publishing
+```
+
+Packages are written to `release/`. Unsigned local packages can be used for verification. Public distribution requires Apple code signing and notarization for macOS and code signing for Windows; signing credentials are not included in this repository. Windows and Linux packages have not been verified on this machine.
 
 ## Features
 
@@ -91,7 +138,7 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 
 ## Architecture
 
-Zero runtime dependencies. Node >= 18, plain `node:http`, TypeScript compiled to `dist/`.
+The CLI/Web UI has zero runtime npm dependencies: Node >= 18, plain `node:http`, TypeScript compiled to `dist/`.
 
 ```
 src/
@@ -101,11 +148,18 @@ src/
   diff.ts     unified-diff parser + side-by-side row pairing + word spans
   page.ts     the single-page UI (inline CSS/JS, no build step)
   hljs.ts     vendored highlight.js v11.11.1 (common bundle), inlined into the page
+  desktop/
+    main.ts    Electron lifecycle, native folder sessions, and window state
+    preload.cts  sandboxed contextBridge API and desktop command subscription
+    menu.ts    native menus, recent folders, and shortcuts
+    settings.ts  persisted recent folders and window placement
 bin/
   revision.js  npm bin wrapper -> dist/cli.js
 scripts/
   demo.mjs     generates sample repos under /tmp/revision-demo
   build-version.mjs  embeds the build date and tool Commit ID into src/build-info.ts
+tests/
+  *.test.mjs  desktop menu/settings/page contracts and server port behavior
 ```
 
 Data flow:

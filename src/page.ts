@@ -243,8 +243,12 @@ body {
 }
 .ibtn:hover { color: var(--text); border-color: var(--border-hover); }
 .ibtn.on { color: var(--accent); border-color: var(--accent); }
+html.desktop .desktop-open-folder { flex: none; white-space: nowrap; }
+html.desktop .empty .desktop-open-folder { margin-top: 12px; }
 
 /* ---------- layout ---------- */
+html.desktop { --revision-side-width: 320px; --revision-ftree-width: 264px; }
+html.desktop .pane-resizer { display: none; }
 .body { flex: 1; display: flex; min-height: 0; }
 .version {
   height: 26px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
@@ -473,6 +477,25 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   html.side-collapsed .rail { display: none; }
 }
 
+@media (min-width:901px) {
+  html.desktop .side { width: var(--revision-side-width); border-right: 0; }
+  html.desktop .ftree { width: var(--revision-ftree-width); }
+  html.desktop .diffbox { border-left: 0; }
+  html.desktop .pane-resizer {
+    display: block; position: relative; flex: 0 0 5px; width: 5px;
+    cursor: col-resize; touch-action: none; user-select: none; z-index: 2;
+  }
+  html.desktop .pane-resizer::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px;
+    background: var(--border);
+  }
+  html.desktop .pane-resizer:hover::before,
+  html.desktop .pane-resizer.dragging::before,
+  html.desktop .pane-resizer:focus-visible::before { background: var(--accent); }
+  html.desktop .pane-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  html.desktop.side-collapsed #sideResizer { display: none; }
+}
+
 @media (max-width: 700px) {
   .top { gap: 6px; padding: 0 8px; }
   .brand { margin-right: 0; }
@@ -535,6 +558,63 @@ function toggleSide() {
   var c = !document.documentElement.classList.contains("side-collapsed");
   document.documentElement.classList.toggle("side-collapsed", c);
   try { localStorage.setItem("revision-side", c ? "collapsed" : "open"); } catch (e) { /* storage unavailable */ }
+}
+var desktop = window.revisionDesktop || null;
+var PANE = {
+  side: { key: "revision-side-width", prop: "--revision-side-width", min: 240, max: 420, def: 320 },
+  ftree: { key: "revision-ftree-width", prop: "--revision-ftree-width", min: 200, max: 380, def: 264 }
+};
+var paneWidths = {};
+
+function openDesktopFolder() {
+  if (!desktop) return;
+  Promise.resolve().then(function () { return desktop.openFolder(); }).catch(function (e) {
+    toast(e && e.message ? e.message : "Unable to open folder");
+  });
+}
+function showNoRepositories() {
+  if (!desktop) {
+    mainEmpty("⎇", "No git repositories", 'No git repos found in the target directory. Start the server pointing at a repository itself (<code class="k">revision /path/to/repo</code>) or at the directory that contains them (<code class="k">revision /path/to/parent</code>).');
+    return;
+  }
+  mainEmpty("⎇", "No git repositories",
+    'Open a Git repository, or a folder whose direct subfolders are Git repositories.' +
+    '<br><button type="button" id="emptyOpenFolder" class="dd-btn desktop-open-folder">Open Folder…</button>');
+  $("emptyOpenFolder").onclick = openDesktopFolder;
+}
+function refreshCurrent() {
+  return state.repo
+    ? openRepo(state.repo, state.branch, state.commit ? state.commit.sha : null)
+    : boot();
+}
+function clampWidth(cfg, value) {
+  return Math.min(cfg.max, Math.max(cfg.min, Math.round(value)));
+}
+function readWidth(cfg) {
+  try {
+    var raw = localStorage.getItem(cfg.key);
+    if (raw == null || raw.trim() === "") return cfg.def;
+    var value = Number(raw);
+    if (!Number.isFinite(value)) return cfg.def;
+    return clampWidth(cfg, value);
+  } catch (e) { return cfg.def; }
+}
+function saveWidth(kind) {
+  try { localStorage.setItem(PANE[kind].key, String(paneWidths[kind])); }
+  catch (e) { /* storage unavailable; retain the in-memory width */ }
+}
+function applyWidth(kind, value, persist) {
+  var cfg = PANE[kind];
+  var width = clampWidth(cfg, value);
+  paneWidths[kind] = width;
+  document.documentElement.style.setProperty(cfg.prop, width + "px");
+  var separator = $(kind === "side" ? "sideResizer" : "ftreeResizer");
+  if (separator) separator.setAttribute("aria-valuenow", String(width));
+  if (persist) saveWidth(kind);
+}
+function initPaneWidths() {
+  applyWidth("side", readWidth(PANE.side), false);
+  applyWidth("ftree", readWidth(PANE.ftree), false);
 }
 /* Access token: the server prints a URL of the form /?token=<secret> at startup.
    The page keeps it in the query string and forwards it as a Bearer header on
@@ -751,7 +831,6 @@ function writeHash() {
 
 /* ---------------- boot ---------------- */
 async function boot() {
-  bindChrome();
   try {
     var data = await api("/api/repos");
     state.repos = data.repos;
@@ -762,7 +841,7 @@ async function boot() {
   repoDd.setItems(state.repos.map(function (r) { return { value: r.id, label: r.name, sub: r.path }; }));
   if (!state.repos.length) {
     repoDd.setValue("", "(no repos)");
-    mainEmpty("⎇", "No git repositories", 'No git repos found in the target directory. Start the server pointing at a repository itself (<code class="k">revision /path/to/repo</code>) or at the directory that contains them (<code class="k">revision /path/to/parent</code>).');
+    showNoRepositories();
     return;
   }
   var h = readHash();
@@ -942,6 +1021,7 @@ function renderWorkDetail() {
     '<div class="diffbox" id="diffbox"></div>' +
     "</div>" +
     "</div>";
+  installFileTreeResizer();
   renderTree();
   renderDiff();
 }
@@ -972,6 +1052,7 @@ function renderDetail() {
     '<div class="diffbox" id="diffbox"></div>' +
     "</div>" +
     "</div>";
+  installFileTreeResizer();
   $("shaChip").onclick = function () { copyText(d.sha, "Commit SHA copied"); };
   renderTree();
   renderDiff();
@@ -1588,6 +1669,114 @@ function spinWhile(btn, p) {
   p.then(stop, stop);
 }
 
+function createPaneResizer(kind, id, label) {
+  var cfg = PANE[kind];
+  var el = document.createElement("div");
+  el.id = id;
+  el.className = "pane-resizer";
+  el.setAttribute("role", "separator");
+  el.setAttribute("tabindex", "0");
+  el.setAttribute("aria-orientation", "vertical");
+  el.setAttribute("aria-label", label);
+  el.setAttribute("aria-valuemin", String(cfg.min));
+  el.setAttribute("aria-valuemax", String(cfg.max));
+  el.setAttribute("aria-valuenow", String(paneWidths[kind]));
+
+  var pointerId = null, startX = 0, startWidth = 0;
+  el.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    el.focus();
+    pointerId = e.pointerId;
+    startX = e.clientX;
+    startWidth = paneWidths[kind];
+    el.setPointerCapture(pointerId);
+    el.classList.add("dragging");
+  });
+  el.addEventListener("pointermove", function (e) {
+    if (e.pointerId !== pointerId) return;
+    applyWidth(kind, startWidth + (e.clientX - startX), false);
+  });
+  function finish(e) {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    el.classList.remove("dragging");
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    saveWidth(kind);
+  }
+  el.addEventListener("pointerup", finish);
+  el.addEventListener("pointercancel", finish);
+  el.addEventListener("lostpointercapture", function () {
+    pointerId = null;
+    el.classList.remove("dragging");
+  });
+  el.addEventListener("dblclick", function () { applyWidth(kind, cfg.def, true); });
+  el.addEventListener("keydown", function (e) {
+    var delta = e.key === "ArrowLeft" ? -10 : e.key === "ArrowRight" ? 10 : 0;
+    if (!delta) return;
+    e.preventDefault();
+    applyWidth(kind, paneWidths[kind] + delta, true);
+  });
+  return el;
+}
+
+function installFileTreeResizer() {
+  if (!desktop || $("ftreeResizer")) return;
+  var tree = $("ftree");
+  if (!tree || !$("diffbox")) return;
+  tree.insertAdjacentElement("afterend",
+    createPaneResizer("ftree", "ftreeResizer", "Resize file tree"));
+}
+function focusCommitFilter() {
+  if (document.documentElement.classList.contains("side-collapsed")) toggleSide();
+  var input = $("filter");
+  input.focus();
+  input.select();
+}
+function focusFileFilter() {
+  var input = $("fileFilter");
+  if (!input || !input.getClientRects().length) return;
+  input.focus();
+}
+function bindDesktop() {
+  if (!desktop) return;
+  document.documentElement.classList.add("desktop");
+  initPaneWidths();
+
+  var openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.id = "desktopOpenFolder";
+  openButton.className = "dd-btn desktop-open-folder";
+  openButton.textContent = "Open Folder…";
+  openButton.onclick = openDesktopFolder;
+  $("connectionStatus").insertAdjacentElement("beforebegin", openButton);
+
+  var side = document.querySelector(".side");
+  side.insertAdjacentElement("afterend",
+    createPaneResizer("side", "sideResizer", "Resize commit list"));
+  installFileTreeResizer();
+
+  var offCommand = desktop.onCommand(function (command) {
+    switch (command) {
+      case "refresh":
+        spinWhile($("refreshBtn"), refreshCurrent());
+        break;
+      case "toggle-sidebar":
+        toggleSide();
+        break;
+      case "filter-commits":
+        focusCommitFilter();
+        break;
+      case "filter-files":
+        focusFileFilter();
+        break;
+      default:
+        return;
+    }
+  });
+  window.addEventListener("pagehide", function () { offCommand(); }, { once: true });
+}
+
 function bindChrome() {
   applyTheme(document.documentElement.getAttribute("data-theme") || "light");
   $("themeBtn").onclick = toggleTheme;
@@ -1596,11 +1785,7 @@ function bindChrome() {
   $("main").addEventListener("input", function (e) {
     if (e.target && e.target.id === "fileFilter") { state.fileQuery = e.target.value; renderTree(); }
   });
-  $("refreshBtn").onclick = function () {
-    spinWhile(this, state.repo
-      ? openRepo(state.repo, state.branch, state.commit ? state.commit.sha : null)
-      : boot());
-  };
+  $("refreshBtn").onclick = function () { spinWhile(this, refreshCurrent()); };
   $("filter").oninput = function () { state.filter = this.value; renderCommits(); };
   $("moreBtn").onclick = function () { loadCommits(state.commits.length, null); };
   $("commitList").onclick = function (e) {
@@ -1634,6 +1819,7 @@ function bindChrome() {
       if (state.commits.some(function (c) { return c.sha === h.c; })) selectCommit(h.c);
     }
   });
+  bindDesktop();
 }
 function scrollCommitIntoView(sha) {
   var el = document.querySelector('.commit[data-sha="' + sha + '"]');
@@ -1641,5 +1827,6 @@ function scrollCommitIntoView(sha) {
 }
 
 startConnectionMonitor();
+bindChrome();
 boot();
 `;

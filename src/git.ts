@@ -19,8 +19,6 @@ export class GitError extends Error {
   }
 }
 
-const GIT_ENV = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
-
 function git(
   repo: string,
   args: string[],
@@ -30,7 +28,11 @@ function git(
     execFile(
       "git",
       ["-C", repo, ...args],
-      { env: GIT_ENV, maxBuffer: opts.maxBuffer ?? 32 * 1024 * 1024, timeout: 20_000 },
+      {
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+        maxBuffer: opts.maxBuffer ?? 32 * 1024 * 1024,
+        timeout: 20_000,
+      },
       (err, stdout, stderr) => {
         if (err) {
           const code = (err as NodeJS.ErrnoException & { code?: number }).code ?? -1;

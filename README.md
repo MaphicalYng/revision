@@ -79,7 +79,7 @@ The desktop build is a standalone application for each platform:
 | Windows | NSIS installer, x64 |
 | Linux | AppImage, x64 |
 
-Launch the app directly: Electron/Chromium and the Node runtime are included, so no system Node.js, npm, terminal, or external browser is needed. **Git is not bundled.** Install Git separately and make sure the `git` executable is available on `PATH`; a GUI-launched app may inherit a different `PATH` from your terminal. If Git is missing or cannot run, the app shows a native error with **Retry**.
+Launch the app directly: Electron/Chromium and the Node runtime are included, so no system Node.js, npm, terminal, or external browser is needed. **Git is not bundled.** Install Git separately. The app searches `PATH` plus the standard install locations (`/usr/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/snap/bin` on Linux). If Git is missing or cannot run, the app shows a native error with **Retry**.
 
 On first launch the app opens your home directory. Later launches restore the last successfully opened folder. **Open Folder…** uses the native directory picker, and **Open Recent** keeps up to 10 folders and includes **Clear Recent**. Folder discovery is the same as the CLI: the selected folder itself is included when it is a git repository, as are its direct subdirectories containing a `.git` entry. Switching folders does not ask for confirmation because revision is read-only.
 

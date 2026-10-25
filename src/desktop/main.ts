@@ -20,6 +20,7 @@ import {
 } from "electron";
 
 import { startServer } from "../server.js";
+import { ensureExecutablePath } from "./env.js";
 import { DESKTOP_COMMAND_CHANNEL, DESKTOP_OPEN_FOLDER_CHANNEL } from "./ipc.js";
 import { createMenuTemplate } from "./menu.js";
 import {
@@ -78,6 +79,9 @@ let shutdownComplete = false;
 const controllers = new Set<DesktopController>();
 const windowStates = new WeakMap<BrowserWindow, WindowState>();
 
+/* Augment the GUI process before any git check or server command runs. */
+ensureExecutablePath();
+
 function closeSession(value: Session): Promise<void> {
   if (value.closing) return value.closing;
   value.closing = new Promise<void>((resolve, reject) => {
@@ -126,7 +130,7 @@ async function ensureGitWithRetry(
       ({ response } = await dialog.showMessageBox(win, {
         type: "error",
         message: "Git is required",
-        detail: "Install Git and make sure the git executable is available in PATH, then retry.",
+        detail: "Install Git, then retry. revision also searches common install locations when PATH is incomplete.",
         buttons: mode === "startup" ? ["Retry", "Quit"] : ["Retry", "Cancel"],
         defaultId: 0,
         cancelId: 1,

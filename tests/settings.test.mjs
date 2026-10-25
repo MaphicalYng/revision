@@ -68,6 +68,33 @@ test("normalization whitelists fields and validates roots and window values", ()
   }
 });
 
+test("onboarding completion is normalized and persisted", async (t) => {
+  assert.equal(
+    normalizeDesktopSettings({ version: 1, recentRoots: [], onboarded: true }).onboarded,
+    true,
+  );
+  assert.equal(
+    normalizeDesktopSettings({ version: 1, recentRoots: [], onboarded: false }).onboarded,
+    undefined,
+  );
+  assert.equal(
+    normalizeDesktopSettings({ version: 1, recentRoots: [], onboarded: "yes" }).onboarded,
+    undefined,
+  );
+
+  const directory = await temporaryDirectory(t);
+  const filePath = path.join(directory, "settings.json");
+  await saveDesktopSettings(filePath, {
+    version: 1,
+    lastRoot: "/work",
+    recentRoots: ["/work"],
+    onboarded: true,
+  });
+  const loaded = await loadDesktopSettings(filePath);
+  assert.equal(loaded.onboarded, true);
+  assert.equal(loaded.lastRoot, "/work");
+});
+
 test("save round-trips normalized settings through a same-directory temporary file", async (t) => {
   const directory = await temporaryDirectory(t);
   const filePath = path.join(directory, "nested", "settings.json");

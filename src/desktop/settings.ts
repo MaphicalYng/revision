@@ -14,6 +14,7 @@ export interface DesktopSettings {
   version: 1;
   lastRoot?: string;
   recentRoots: string[];
+  onboarded?: boolean;
   window?: DesktopWindowSettings;
 }
 
@@ -45,6 +46,7 @@ export function normalizeDesktopSettings(value: unknown): DesktopSettings {
   if (typeof value.lastRoot === "string" && value.lastRoot.length > 0) {
     normalized.lastRoot = value.lastRoot;
   }
+  if (value.onboarded === true) normalized.onboarded = true;
 
   if (Array.isArray(value.recentRoots)) {
     const seen = new Set<string>();

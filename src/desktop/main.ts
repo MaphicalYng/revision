@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import type http from "node:http";
-import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +22,7 @@ import { startServer } from "../server.js";
 import { ensureExecutablePath } from "./env.js";
 import { DESKTOP_COMMAND_CHANNEL, DESKTOP_OPEN_FOLDER_CHANNEL } from "./ipc.js";
 import { createMenuTemplate } from "./menu.js";
+import { renderWelcomePage } from "./welcome.js";
 import {
   clearRecentRoots,
   defaultDesktopSettings,
@@ -36,6 +36,8 @@ import {
 const DESKTOP_SCHEME = "revision";
 const DESKTOP_ORIGIN = "revision://app";
 const DESKTOP_PAGE_URL = "revision://app/";
+const DESKTOP_WELCOME_PATH = "/welcome";
+const DESKTOP_WELCOME_URL = `${DESKTOP_ORIGIN}${DESKTOP_WELCOME_PATH}`;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -317,6 +319,16 @@ async function handleDesktopRequest(request: Request): Promise<Response> {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  if (source.pathname === DESKTOP_WELCOME_PATH) {
+    return new Response(request.method === "HEAD" ? null : renderWelcomePage(), {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'",
+        "cache-control": "no-store",
+      },
+    });
+  }
+
   const active = controller?.activeSession;
   if (!active) return new Response("No active session", { status: 503 });
 
@@ -485,7 +497,7 @@ async function createMainWindow(): Promise<void> {
       },
     });
     const windowController = new DesktopController(win, (root) => {
-      settings = recordRecentRoot(settings, root);
+      settings = { ...recordRecentRoot(settings, root), onboarded: true };
       rebuildMenu();
       void persistSettings().catch(() => undefined);
     });
@@ -520,7 +532,11 @@ async function createMainWindow(): Promise<void> {
       if (!isDesktopOrigin(target)) event.preventDefault();
     });
 
-    await windowController.switchRoot(settings.lastRoot ?? homedir());
+    if (settings.onboarded === true && settings.lastRoot) {
+      await windowController.switchRoot(settings.lastRoot);
+    } else {
+      await win.loadURL(DESKTOP_WELCOME_URL);
+    }
   })().finally(() => {
     windowCreation = undefined;
   });

@@ -98,12 +98,13 @@ On first launch the app opens your home directory. Later launches restore the la
 
 ### Window and layout
 
-Window size, position, and maximized state, the light/dark theme, the commit-list collapsed state, and both pane widths persist across launches. Drag a separator to resize its pane, or focus the separator and use the left/right arrow keys. Double-click a separator to restore its default width.
+Window size, position, and maximized state, the light/dark theme, the commit-list collapsed state, and both pane widths persist across launches. The commit-message separator starts fitted to the selected commit's message, so switching commits re-fits it. Drag the separator or focus it and use the up/down arrow keys to override the height for the current commit; double-click it to fit the message again.
 
-| Pane | Adjustable width | Default |
+| Pane | Adjustable size | Default |
 | --- | --- | --- |
-| Commit list | 240–420 px | 320 px |
-| Changed-file tree | 200–380 px | 264 px |
+| Commit list | 240–420 px wide | 320 px |
+| Changed-file tree | 200–380 px wide | 264 px |
+| Commit message | 88 px to available height | Fits content; long message bodies scroll at 26vh |
 
 ### Building desktop packages
 

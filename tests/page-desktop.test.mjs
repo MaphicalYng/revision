@@ -35,6 +35,7 @@ test("desktop API, command whitelist, and resizer contracts are present", () => 
   assert.match(mainScript, /"role", "separator"/);
   assert.match(mainScript, /"tabindex", "0"/);
   assert.match(mainScript, /"aria-orientation", "vertical"/);
+  assert.match(mainScript, /"aria-orientation", "horizontal"/);
   assert.match(mainScript, /"aria-valuemin"/);
   assert.match(mainScript, /"aria-valuemax"/);
   assert.match(mainScript, /"aria-valuenow"/);
@@ -42,8 +43,11 @@ test("desktop API, command whitelist, and resizer contracts are present", () => 
   assert.match(mainScript, /ftree:\s*\{[^\n]*min: 200, max: 380, def: 264/);
   assert.ok(mainScript.includes("revision-side-width"));
   assert.ok(mainScript.includes("revision-ftree-width"));
+  assert.doesNotMatch(mainScript, /revision-head-height/);
+  assert.match(mainScript, /id = "headResizer"/);
+  assert.match(mainScript, /head\.insertAdjacentElement\("afterend", createHeadResizer\(head\)\)/);
   assert.match(mainScript, /renderWorkDetail[\s\S]*?installFileTreeResizer\(\);/);
-  assert.match(mainScript, /function renderDetail[\s\S]*?installFileTreeResizer\(\);/);
+  assert.match(mainScript, /function renderDetail[\s\S]*?installFileTreeResizer\(\);\s*installHeadResizer\(\);/);
 });
 
 test("Web initial DOM and empty-repository instructions stay unchanged", () => {
@@ -72,8 +76,13 @@ test("desktop layout rules preserve Web responsive behavior", () => {
   const rules = desktopMedia[1];
   assert.match(rules, /html\.desktop \.side \{ width: var\(--revision-side-width\); border-right: 0; \}/);
   assert.match(rules, /html\.desktop \.ftree \{ width: var\(--revision-ftree-width\); \}/);
-  assert.match(rules, /html\.desktop \.pane-resizer \{[\s\S]*?flex: 0 0 5px; width: 5px;/);
-  assert.match(rules, /html\.desktop \.pane-resizer::before \{[\s\S]*?left: 2px; width: 1px;/);
+  assert.match(rules, /html\.desktop \.pane-resizer\.is-vertical \{[\s\S]*?flex: 0 0 5px; width: 5px;/);
+  assert.match(rules, /html\.desktop \.pane-resizer\.is-vertical::before \{[\s\S]*?left: 2px; width: 1px;/);
+  assert.match(rules, /\.pane-resizer\.is-horizontal \{[\s\S]*?flex: 0 0 9px; height: 9px;/);
+  assert.match(rules, /\.pane-resizer\.is-horizontal::before \{[\s\S]*?top: 4px; left: 0; right: 0; height: 1px;/);
   assert.match(rules, /html\.desktop\.side-collapsed #sideResizer \{ display: none; \}/);
+  assert.match(html, /\.d-head \{ flex: none; overflow-y: auto; \}/);
+  assert.match(html, /\.d-head\.sized \.d-body \{ max-height: none; \}/);
+  assert.match(html, /\.d-body \{[^}]*max-height: 26vh; overflow-y: auto;/);
   assert.doesNotMatch(mainScript, /(?:side|ftree|tree)\.style\.width/);
 });

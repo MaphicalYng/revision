@@ -248,7 +248,7 @@ html.desktop .empty .desktop-open-folder { margin-top: 12px; }
 
 /* ---------- layout ---------- */
 html.desktop { --revision-side-width: 320px; --revision-ftree-width: 264px; }
-html.desktop .pane-resizer { display: none; }
+.pane-resizer { display: none; }
 .body { flex: 1; display: flex; min-height: 0; }
 .version {
   height: 26px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
@@ -316,7 +316,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .detail { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 18px; }
 .d-head { margin-bottom: 16px; }
 .d-subject { font-size: 20px; font-weight: 650; line-height: 1.3; word-break: break-word; }
-.d-head { flex: none; }
+.d-head { flex: none; overflow-y: auto; }
+.d-head.sized .d-body { max-height: none; }
 .d-body { margin-top: 10px; max-height: 26vh; overflow-y: auto; color: var(--text-2); font-size: 13px; white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--border); padding-left: 12px; }
 .d-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
 .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--panel-3); color: var(--accent); display: grid; place-items: center; font: 700 10px var(--sans); flex: none; }
@@ -481,19 +482,35 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   html.desktop .side { width: var(--revision-side-width); border-right: 0; }
   html.desktop .ftree { width: var(--revision-ftree-width); }
   html.desktop .diffbox { border-left: 0; }
-  html.desktop .pane-resizer {
+  html.desktop .pane-resizer.is-vertical {
     display: block; position: relative; flex: 0 0 5px; width: 5px;
     cursor: col-resize; touch-action: none; user-select: none; z-index: 2;
   }
-  html.desktop .pane-resizer::before {
+  html.desktop .pane-resizer.is-vertical::before {
     content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px;
     background: var(--border);
   }
-  html.desktop .pane-resizer:hover::before,
-  html.desktop .pane-resizer.dragging::before,
-  html.desktop .pane-resizer:focus-visible::before { background: var(--accent); }
-  html.desktop .pane-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  html.desktop .pane-resizer.is-vertical:hover::before,
+  html.desktop .pane-resizer.is-vertical.dragging::before,
+  html.desktop .pane-resizer.is-vertical:focus-visible::before { background: var(--accent); }
+  html.desktop .pane-resizer.is-vertical:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
   html.desktop.side-collapsed #sideResizer { display: none; }
+
+  /* The split between the commit message and the diff view. Negative margins
+     keep the header-to-diff gap at its original 16px. */
+  .pane-resizer.is-horizontal {
+    display: block; position: relative; flex: 0 0 9px; height: 9px;
+    margin: -12px 0 3px;
+    cursor: row-resize; touch-action: none; user-select: none; z-index: 2;
+  }
+  .pane-resizer.is-horizontal::before {
+    content: ""; position: absolute; top: 4px; left: 0; right: 0; height: 1px;
+    background: var(--border);
+  }
+  .pane-resizer.is-horizontal:hover::before,
+  .pane-resizer.is-horizontal.dragging::before,
+  .pane-resizer.is-horizontal:focus-visible::before { background: var(--accent); }
+  .pane-resizer.is-horizontal:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 3px; }
 }
 
 @media (max-width: 700px) {
@@ -565,6 +582,7 @@ var PANE = {
   ftree: { key: "revision-ftree-width", prop: "--revision-ftree-width", min: 200, max: 380, def: 264 }
 };
 var paneWidths = {};
+var HEAD = { min: 88, splitMin: 160 };
 
 function openDesktopFolder() {
   if (!desktop) return;
@@ -1053,6 +1071,7 @@ function renderDetail() {
     "</div>" +
     "</div>";
   installFileTreeResizer();
+  installHeadResizer();
   $("shaChip").onclick = function () { copyText(d.sha, "Commit SHA copied"); };
   renderTree();
   renderDiff();
@@ -1673,7 +1692,7 @@ function createPaneResizer(kind, id, label) {
   var cfg = PANE[kind];
   var el = document.createElement("div");
   el.id = id;
-  el.className = "pane-resizer";
+  el.className = "pane-resizer is-vertical";
   el.setAttribute("role", "separator");
   el.setAttribute("tabindex", "0");
   el.setAttribute("aria-orientation", "vertical");
@@ -1727,6 +1746,103 @@ function installFileTreeResizer() {
   tree.insertAdjacentElement("afterend",
     createPaneResizer("ftree", "ftreeResizer", "Resize file tree"));
 }
+
+function headBounds(head) {
+  var detail = head.parentElement;
+  var max = Math.max(HEAD.min + 40, (detail ? detail.clientHeight : 0) - HEAD.splitMin - 52);
+  return { min: HEAD.min, max: Math.max(HEAD.min, max) };
+}
+function syncHeadResizer(head) {
+  var separator = $("headResizer");
+  if (!separator) return;
+  var bounds = headBounds(head);
+  separator.setAttribute("aria-valuemin", String(bounds.min));
+  separator.setAttribute("aria-valuemax", String(bounds.max));
+  separator.setAttribute("aria-valuenow", String(Math.round(head.getBoundingClientRect().height)));
+}
+function applyHeadHeight(head, value) {
+  var bounds = headBounds(head);
+  var height = Math.round(Math.min(bounds.max, Math.max(bounds.min, value)));
+  head.style.height = height + "px";
+  head.classList.add("sized");
+  syncHeadResizer(head);
+}
+function resetHeadHeight(head) {
+  head.style.height = "";
+  head.classList.remove("sized");
+  syncHeadResizer(head);
+}
+function createHeadResizer(head) {
+  var el = document.createElement("div");
+  el.id = "headResizer";
+  el.className = "pane-resizer is-horizontal";
+  el.setAttribute("role", "separator");
+  el.setAttribute("tabindex", "0");
+  el.setAttribute("aria-orientation", "horizontal");
+  el.setAttribute("aria-label", "Resize commit message");
+
+  var pointerId = null, startY = 0, startHeight = 0;
+  el.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    el.focus();
+    pointerId = e.pointerId;
+    startY = e.clientY;
+    startHeight = head.getBoundingClientRect().height;
+    el.setPointerCapture(pointerId);
+    el.classList.add("dragging");
+  });
+  el.addEventListener("pointermove", function (e) {
+    if (e.pointerId !== pointerId) return;
+    applyHeadHeight(head, startHeight + (e.clientY - startY));
+  });
+  function finish(e) {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    el.classList.remove("dragging");
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+  }
+  el.addEventListener("pointerup", finish);
+  el.addEventListener("pointercancel", finish);
+  el.addEventListener("lostpointercapture", function () {
+    pointerId = null;
+    el.classList.remove("dragging");
+  });
+  el.addEventListener("dblclick", function () { resetHeadHeight(head); });
+  el.addEventListener("keydown", function (e) {
+    var delta = e.key === "ArrowUp" ? -10 : e.key === "ArrowDown" ? 10 : 0;
+    if (!delta) return;
+    e.preventDefault();
+    applyHeadHeight(head, head.getBoundingClientRect().height + delta);
+  });
+  return el;
+}
+function installHeadResizer() {
+  var detail = document.querySelector("#main .detail");
+  var head = detail && detail.querySelector(".d-head");
+  if (!head || $("headResizer")) return;
+  if (window.matchMedia("(min-width: 901px)").matches) head.style.maxHeight = headBounds(head).max + "px";
+  head.insertAdjacentElement("afterend", createHeadResizer(head));
+  syncHeadResizer(head);
+}
+
+function reclampHeadHeight() {
+  var head = document.querySelector("#main .d-head");
+  if (!head) return;
+  if (!window.matchMedia("(min-width: 901px)").matches) {
+    head.style.maxHeight = "";
+    if (head.classList.contains("sized")) {
+      head.style.height = "";
+      head.classList.remove("sized");
+    }
+    syncHeadResizer(head);
+    return;
+  }
+  head.style.maxHeight = headBounds(head).max + "px";
+  if (head.classList.contains("sized")) applyHeadHeight(head, head.getBoundingClientRect().height);
+  else syncHeadResizer(head);
+}
+
 function focusCommitFilter() {
   if (document.documentElement.classList.contains("side-collapsed")) toggleSide();
   var input = $("filter");
@@ -1819,6 +1935,7 @@ function bindChrome() {
       if (state.commits.some(function (c) { return c.sha === h.c; })) selectCommit(h.c);
     }
   });
+  window.addEventListener("resize", reclampHeadHeight);
   bindDesktop();
 }
 function scrollCommitIntoView(sha) {

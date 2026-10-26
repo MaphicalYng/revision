@@ -475,7 +475,7 @@ export async function hasHead(repo: string): Promise<boolean> {
  */
 export async function workStatus(repo: string): Promise<{ hasHead: boolean; files: WorkFile[] }> {
   const head = await hasHead(repo);
-  const out = await git(repo, ["status", "--porcelain=v1", "-z", "-M", "--untracked-files=normal"]);
+  const out = await git(repo, ["status", "--porcelain=v1", "-z", "-M", "--untracked-files=all"]);
   const tok = out.split("\0").filter((t) => t.length > 0);
   const files: WorkFile[] = [];
   for (let i = 0; i < tok.length; i++) {

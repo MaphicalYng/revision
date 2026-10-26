@@ -1153,17 +1153,20 @@ function renderTree() {
   }
 
   function agg(n) {
-    var a = 0, d = 0, known = false;
+    var a = 0, d = 0, known = false, total = 0, untracked = 0;
     n.files.forEach(function (f) {
+      total++;
+      if (f.status === "untracked") untracked++;
       var c = fileCounts(f);
       if (c) { a += c.a; d += c.d; known = true; }
     });
     Object.keys(n.dirs).forEach(function (k) {
       var r = agg(n.dirs[k]);
       a += r.a; d += r.d; known = known || r.known;
+      total += r.total; untracked += r.untracked;
     });
-    n.adds = a; n.dels = d; n.known = known;
-    return { a: a, d: d, known: known };
+    n.adds = a; n.dels = d; n.known = known; n.untracked = total > 0 && total === untracked;
+    return { a: a, d: d, known: known, total: total, untracked: untracked };
   }
   agg(root);
 
@@ -1187,6 +1190,7 @@ function renderTree() {
       var open = dn.path in state.treeOpen ? !!state.treeOpen[dn.path] : !!chain[dn.path];
       out += '<button class="t-row t-dir' + (open ? " open" : "") + '" data-dir="' + esc(dn.path) + '" title="' + esc(label) + '" style="padding-left:' + (8 + depth * 14) + 'px">' +
         '<span class="tw"><svg viewBox="0 0 8 8" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 1.5l3.5 2.5L2 6.5"/></svg></span>' +
+        (dn.untracked ? '<span class="st U" title="Untracked directory">U</span>' : "") +
         '<span class="t-name">' + esc(label) + "</span>" + (dn.known ? cntHtml({ a: dn.adds, d: dn.dels }) : "") + "</button>";
       if (open) out += html(dn, depth + 1);
     });

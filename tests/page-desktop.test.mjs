@@ -98,3 +98,10 @@ test("commit search requests server-side pages and ignores stale responses", () 
   assert.match(mainScript, /if \(seq === logSeq\) \{\s*state\.loading = false;/);
   assert.doesNotMatch(mainScript, /function commitMatches\(/);
 });
+
+test("fully untracked directories carry the untracked badge", () => {
+  assert.match(mainScript, /total\+\+;\s*if \(f\.status === "untracked"\) untracked\+\+/);
+  assert.match(mainScript, /total \+= r\.total; untracked \+= r\.untracked;/);
+  assert.match(mainScript, /n\.untracked = total > 0 && total === untracked/);
+  assert.ok(mainScript.includes(`(dn.untracked ? '<span class="st U" title="Untracked directory">U</span>' : "")`));
+});

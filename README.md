@@ -136,7 +136,7 @@ Packages are written to `release/`. Unsigned local packages can be used for veri
 - **Merge commits** — diff computed against the first parent, with a note in the header
 - **Root commits** — handled via `git diff-tree --root` / `git show`
 - **Hash routing** — `#r=<repo>&b=<branch>&c=<sha>` is synced as you navigate, so repository, branch, and commit navigation is shareable/bookmarkable
-- **Security** — token authentication on by default (random token per start, printed as a ready URL; `--token` to fix your own, `--no-auth` to opt out); constant-time comparison; repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls go through `execFile` argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
+- **Security** — token authentication on by default (random token per start, printed as a ready URL; `--token` to fix your own, `--no-auth` to opt out); constant-time comparison; repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls use argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
 - **Server status & build version** — the header shows connected/disconnected state using an authenticated 10-second health check plus browser network events; the footer shows the tool's build date and source Commit ID, embedded at build time so npm installs do not need the tool's `.git` directory
 
 ## Architecture
@@ -147,7 +147,7 @@ The CLI/Web UI has zero runtime npm dependencies: Node >= 18, plain `node:http`,
 src/
   cli.ts      argument parsing, browser launch
   server.ts   http server, routing, input validation, JSON API
-  git.ts      safe execFile wrappers around the git CLI
+  git.ts      safe argument-array wrappers around the git CLI
   diff.ts     unified-diff parser + side-by-side row pairing + word spans
   page.ts     the single-page UI (inline CSS/JS, no build step)
   hljs.ts     vendored highlight.js v11.11.1 (common bundle), inlined into the page

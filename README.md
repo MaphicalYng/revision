@@ -123,7 +123,7 @@ Packages are written to `release/`. Unsigned local packages can be used for veri
 - **Branches** — local branches with the current one preselected; remote branches under an optgroup
 - **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking
 - **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type
-- **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", client-side filter box (matches subject, author, and SHA — short or full 40-char, any prefix length), merge-commit markers, relative timestamps
+- **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", server-side full-history search (matches subject, author name or email, and SHA — short or full 40-char, any prefix length), merge-commit markers, relative timestamps
 - **File tree** — changed files rendered as an expandable directory tree beside the diff (not a tab strip), with per-file and per-directory `+x −y` counts and `A`/`M`/`D`/`R`/`U` status badges; the chain to the selected file auto-expands, everything else starts collapsed
 - **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs, unborn-branch support
 - **Commit detail** — full message body, author, exact date, copyable SHA and file paths, aggregate `files changed / +ins / −del` stats

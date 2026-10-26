@@ -183,8 +183,10 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         if (!rp) return;
         const branch = url.searchParams.get("branch") || "HEAD";
         if (branch.length > 300) throw new HttpError("invalid branch", 400);
+        const query = url.searchParams.get("q") ?? "";
+        if (query.length > 300) throw new HttpError("invalid search query", 400);
         const skip = Math.max(0, parseInt(url.searchParams.get("skip") ?? "0", 10) || 0);
-        json(res, 200, await log(rp, branch, skip));
+        json(res, 200, await log(rp, branch, skip, query));
         return;
       }
 

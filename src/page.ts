@@ -55,7 +55,7 @@ export function renderPage(): string {
   <aside class="side">
     <div class="side-head">
       <div class="side-head-row"><span id="sideTitle">Commits</span><button class="ibtn sm" id="collapseSide" title="Hide commit list" aria-label="hide commit list"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5"/></svg></button></div>
-      <input id="filter" type="search" placeholder="Filter loaded commits" autocomplete="off" spellcheck="false">
+      <input id="filter" type="search" placeholder="Search all commits: author, email, subject, SHA" autocomplete="off" spellcheck="false">
     </div>
     <div id="commitList" class="commits"></div>
     <button id="moreBtn" class="more" hidden>Load more</button>
@@ -247,7 +247,7 @@ html.desktop .desktop-open-folder { flex: none; white-space: nowrap; }
 html.desktop .empty .desktop-open-folder { margin-top: 12px; }
 
 /* ---------- layout ---------- */
-html.desktop { --revision-side-width: 320px; --revision-ftree-width: 264px; }
+:root { --revision-side-width: 320px; --revision-ftree-width: 264px; }
 .pane-resizer { display: none; }
 .body { flex: 1; display: flex; min-height: 0; }
 .version {
@@ -479,22 +479,22 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 }
 
 @media (min-width:901px) {
-  html.desktop .side { width: var(--revision-side-width); border-right: 0; }
+  .side { width: var(--revision-side-width); border-right: 0; }
   html.desktop .ftree { width: var(--revision-ftree-width); }
   html.desktop .diffbox { border-left: 0; }
-  html.desktop .pane-resizer.is-vertical {
+  .pane-resizer.is-vertical {
     display: block; position: relative; flex: 0 0 5px; width: 5px;
     cursor: col-resize; touch-action: none; user-select: none; z-index: 2;
   }
-  html.desktop .pane-resizer.is-vertical::before {
+  .pane-resizer.is-vertical::before {
     content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px;
     background: var(--border);
   }
-  html.desktop .pane-resizer.is-vertical:hover::before,
-  html.desktop .pane-resizer.is-vertical.dragging::before,
-  html.desktop .pane-resizer.is-vertical:focus-visible::before { background: var(--accent); }
-  html.desktop .pane-resizer.is-vertical:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-  html.desktop.side-collapsed #sideResizer { display: none; }
+  .pane-resizer.is-vertical:hover::before,
+  .pane-resizer.is-vertical.dragging::before,
+  .pane-resizer.is-vertical:focus-visible::before { background: var(--accent); }
+  .pane-resizer.is-vertical:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  html.side-collapsed #sideResizer { display: none; }
 
   /* The split between the commit message and the diff view. Negative margins
      keep the header-to-diff gap at its original 16px. */
@@ -868,8 +868,14 @@ async function boot() {
   await openRepo(start.id, h.b || null, h.c || null);
 }
 
+var logSeq = 0;
+var filterTimer = null;
+
 async function openRepo(id, branchWanted, commitWanted) {
   commitSeq++;
+  logSeq++;
+  clearTimeout(filterTimer);
+  state.loading = false;
   state.repo = id; state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.commits = []; state.commit = null; state.fileSel = null; state.work = null; state.view = "commit"; state.treeOpen = {};
   writeHash();
   try {
@@ -892,34 +898,59 @@ async function openRepo(id, branchWanted, commitWanted) {
 }
 
 async function loadCommits(skip, commitWanted) {
-  if (state.loading) return; state.loading = true;
+  if (skip > 0 && state.loading) return;
+  var seq = ++logSeq;
+  state.loading = true;
+  var repo = state.repo;
+  var branch = state.branch;
+  var query = state.filter.trim();
   writeHash();
   var list = $("commitList");
-  if (skip === 0) { state.commits = []; state.pendingSha = null; list.innerHTML = '<div class="diff-empty">Loading…</div>'; }
+  if (skip === 0) {
+    commitSeq++;
+    state.commits = []; state.hasMore = false; state.pendingSha = null;
+    list.innerHTML = '<div class="diff-empty">Loading…</div>';
+  }
   $("moreBtn").hidden = true;
   try {
-    var data = await api("/api/repo/" + encodeURIComponent(state.repo) + "/log?branch=" + encodeURIComponent(state.branch || "HEAD") + "&skip=" + skip);
+    var data = await api("/api/repo/" + encodeURIComponent(repo) + "/log?branch=" + encodeURIComponent(branch || "HEAD") + "&skip=" + skip + "&q=" + encodeURIComponent(query));
+    if (seq !== logSeq) return;
     if (skip === 0) state.commits = []; else removeGhost();
     state.commits = state.commits.concat(data.commits);
     state.hasMore = data.hasMore;
     renderCommits();
     if (skip === 0) {
+      var currentSha = state.commit && state.commit.sha;
       var target = commitWanted && data.commits.some(function (c) { return c.sha === commitWanted; })
-        ? commitWanted : (data.commits[0] ? data.commits[0].sha : null);
-      if (target) await selectCommit(target);
-      else mainEmpty("∅", "No commits on this branch", "This branch has no commits yet.");
+        ? commitWanted
+        : (currentSha && data.commits.some(function (c) { return c.sha === currentSha; })
+          ? currentSha : (data.commits[0] ? data.commits[0].sha : null));
+      if (target && (!state.commit || state.commit.sha !== target)) {
+        await selectCommit(target);
+      } else if (target) {
+        renderCommits();
+      } else {
+        commitSeq++;
+        state.commit = null; state.files = []; state.fileSel = null; state.view = "commit";
+        writeHash();
+        if (query) mainEmpty("∅", "No commits match", "No commits in this branch match your search.");
+        else mainEmpty("∅", "No commits on this branch", "This branch has no commits yet.");
+      }
     }
   } catch (e) {
+    if (seq !== logSeq) return;
     list.innerHTML = '<div class="diff-empty">' + esc(e.message) + "</div>";
   } finally {
-    state.loading = false;
-    $("moreBtn").hidden = !state.hasMore;
+    if (seq === logSeq) {
+      state.loading = false;
+      $("moreBtn").hidden = !state.hasMore;
+    }
   }
 }
 function removeGhost() { /* placeholder for future skeleton rows */ }
 
 function renderCommits() {
-  var q = state.filter.trim().toLowerCase();
+  var q = state.filter.trim();
   var workRow = "";
   if (!q && state.work && state.work.files && state.work.files.length) {
     var won = state.view === "work" ? " on" : "";
@@ -927,10 +958,7 @@ function renderCommits() {
     workRow = '<button class="commit work' + won + '" data-work="1"><div class="c-subject">Working tree</div>' +
       '<div class="c-meta"><span class="c-sha">&#9679;</span><span class="c-author">' + wn + " uncommitted file" + (wn === 1 ? "" : "s") + "</span></div></button>";
   }
-  var items = state.commits.filter(function (c) {
-    /* match subject, author, short SHA, and the full 40-char SHA (any prefix length) */
-    return !q || (c.subject + " " + c.author + " " + c.shortSha + " " + c.sha).toLowerCase().indexOf(q) >= 0;
-  });
+  var items = state.commits;
   $("commitList").innerHTML = workRow + items.map(function (c) {
     var on = state.commit && state.commit.sha === c.sha ? " on" : "";
     var mp = c.parents > 1 ? ' <span class="c-parents" title="merge commit">·merge</span>' : "";
@@ -1857,7 +1885,6 @@ function focusFileFilter() {
 function bindDesktop() {
   if (!desktop) return;
   document.documentElement.classList.add("desktop");
-  initPaneWidths();
 
   var openButton = document.createElement("button");
   openButton.type = "button";
@@ -1867,9 +1894,6 @@ function bindDesktop() {
   openButton.onclick = openDesktopFolder;
   $("connectionStatus").insertAdjacentElement("beforebegin", openButton);
 
-  var side = document.querySelector(".side");
-  side.insertAdjacentElement("afterend",
-    createPaneResizer("side", "sideResizer", "Resize commit list"));
   installFileTreeResizer();
 
   var offCommand = desktop.onCommand(function (command) {
@@ -1895,6 +1919,10 @@ function bindDesktop() {
 
 function bindChrome() {
   applyTheme(document.documentElement.getAttribute("data-theme") || "light");
+  initPaneWidths();
+  var side = document.querySelector(".side");
+  side.insertAdjacentElement("afterend",
+    createPaneResizer("side", "sideResizer", "Resize commit list"));
   $("themeBtn").onclick = toggleTheme;
   $("collapseSide").onclick = toggleSide;
   $("expandSide").onclick = toggleSide;
@@ -1902,7 +1930,11 @@ function bindChrome() {
     if (e.target && e.target.id === "fileFilter") { state.fileQuery = e.target.value; renderTree(); }
   });
   $("refreshBtn").onclick = function () { spinWhile(this, refreshCurrent()); };
-  $("filter").oninput = function () { state.filter = this.value; renderCommits(); };
+  $("filter").oninput = function () {
+    state.filter = this.value;
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(function () { loadCommits(0, null); }, 500);
+  };
   $("moreBtn").onclick = function () { loadCommits(state.commits.length, null); };
   $("commitList").onclick = function (e) {
     var btn = e.target.closest(".commit");

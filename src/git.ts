@@ -1,11 +1,11 @@
 /**
- * Thin, safe wrappers around the `git` CLI. Every call goes through
- * execFile with an argument array (never a shell string), so repo paths and
- * revisions cannot inject commands. GIT_OPTIONAL_LOCKS=0 keeps read-only
- * commands from touching the index lock.
+ * Thin, safe wrappers around the `git` CLI. Every call uses an argument
+ * array (never a shell string), so repo paths and revisions cannot inject
+ * commands. GIT_OPTIONAL_LOCKS=0 keeps read-only commands from touching the
+ * index lock.
  */
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -177,22 +177,102 @@ export interface CommitSummary {
   sha: string;
   shortSha: string;
   author: string;
+  email: string;
   date: string;
   subject: string;
   parents: number;
 }
 
-const LOG_FMT = "--pretty=format:%H%x1f%h%x1f%an%x1f%aI%x1f%P%x1f%s";
+const LOG_FMT = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%P%x1f%s";
 const LOG_PAGE = 100;
 
-export async function log(repo: string, branch: string, skip: number): Promise<{ commits: CommitSummary[]; hasMore: boolean }> {
+function parseCommit(line: string): CommitSummary {
+  const [sha, shortSha, author, email, date, parents, subject] = line.split("\x1f");
+  return { sha, shortSha, author, email, date, subject, parents: parents ? parents.split(" ").length : 0 };
+}
+
+function commitMatches(commit: CommitSummary, query: string): boolean {
+  return `${commit.subject} ${commit.author} ${commit.email} ${commit.shortSha} ${commit.sha}`
+    .toLowerCase()
+    .includes(query);
+}
+
+function searchLog(repo: string, branch: string, skip: number, query: string): Promise<{ commits: CommitSummary[]; hasMore: boolean }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", ["-C", repo, "log", branch, LOG_FMT], {
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+
+    const commits: CommitSummary[] = [];
+    let hasMore = false;
+    let matched = 0;
+    let pending = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => finish(new GitError("git command timed out", -1)), 20_000);
+
+    function finish(error?: GitError): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error || hasMore) child.kill();
+      if (error) reject(error);
+      else resolve({ commits, hasMore });
+    }
+
+    function consume(line: string): void {
+      if (!line) return;
+      const commit = parseCommit(line);
+      if (!commitMatches(commit, query)) return;
+      if (matched++ < skip) return;
+      if (commits.length < LOG_PAGE) {
+        commits.push(commit);
+        return;
+      }
+      hasMore = true;
+      finish();
+    }
+
+    child.stdout.on("data", (chunk: string) => {
+      if (settled) return;
+      pending += chunk;
+      let end = pending.indexOf("\n");
+      while (end >= 0) {
+        const line = pending.slice(0, end);
+        pending = pending.slice(end + 1);
+        consume(line);
+        if (settled) return;
+        end = pending.indexOf("\n");
+      }
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr = (stderr + chunk).slice(-4096);
+    });
+    child.on("error", (err) => finish(new GitError(err.message, -1)));
+    child.on("close", (code) => {
+      if (settled) return;
+      if (pending) consume(pending);
+      if (settled) return;
+      if (code === 0) {
+        finish();
+        return;
+      }
+      const tail = stderr.trim().split("\n").slice(-3).join(" ");
+      finish(new GitError(tail || "git command failed", code ?? -1));
+    });
+  });
+}
+
+export async function log(repo: string, branch: string, skip: number, query = ""): Promise<{ commits: CommitSummary[]; hasMore: boolean }> {
+  const q = query.trim().toLowerCase();
+  if (q) return searchLog(repo, branch, skip, q);
   const out = await git(repo, ["log", branch, LOG_FMT, "-n", String(LOG_PAGE + 1), "--skip", String(skip)]);
   const lines = out.split("\n").filter(Boolean);
   const hasMore = lines.length > LOG_PAGE;
-  const commits = lines.slice(0, LOG_PAGE).map((l) => {
-    const [sha, shortSha, author, date, parents, subject] = l.split("\x1f");
-    return { sha, shortSha, author, date, subject, parents: parents ? parents.split(" ").length : 0 };
-  });
+  const commits = lines.slice(0, LOG_PAGE).map(parseCommit);
   return { commits, hasMore };
 }
 

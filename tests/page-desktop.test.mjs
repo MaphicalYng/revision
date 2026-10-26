@@ -65,24 +65,36 @@ test("Web initial DOM and empty-repository instructions stay unchanged", () => {
   assert.doesNotMatch(mainScript, /async function boot\(\) \{\s*bindChrome\(\);/);
 });
 
-test("desktop layout rules preserve Web responsive behavior", () => {
+test("wide layout supports the commit resizer on Web and desktop", () => {
   assert.match(html, /@media \(max-width: 900px\) \{[\s\S]*?\.body \{ flex-direction: column; \}/);
   assert.match(html, /\.side \{ width: 100%; height: 240px; border-right: 0; border-bottom: 1px solid var\(--border\); \}/);
   assert.match(html, /\.d-split \{ flex-direction: column; \}/);
   assert.match(html, /\.ftree \{ width: 100%; max-height: 220px;/);
 
-  const desktopMedia = html.match(/@media \(min-width:901px\) \{([\s\S]*?)\n\}/);
-  assert.ok(desktopMedia, "missing wide desktop media query");
-  const rules = desktopMedia[1];
-  assert.match(rules, /html\.desktop \.side \{ width: var\(--revision-side-width\); border-right: 0; \}/);
+  const wideMedia = html.match(/@media \(min-width:901px\) \{([\s\S]*?)\n\}/);
+  assert.ok(wideMedia, "missing wide layout media query");
+  const rules = wideMedia[1];
+  assert.match(rules, /^  \.side \{ width: var\(--revision-side-width\); border-right: 0; \}/m);
   assert.match(rules, /html\.desktop \.ftree \{ width: var\(--revision-ftree-width\); \}/);
-  assert.match(rules, /html\.desktop \.pane-resizer\.is-vertical \{[\s\S]*?flex: 0 0 5px; width: 5px;/);
-  assert.match(rules, /html\.desktop \.pane-resizer\.is-vertical::before \{[\s\S]*?left: 2px; width: 1px;/);
+  assert.match(rules, /^  \.pane-resizer\.is-vertical \{[\s\S]*?flex: 0 0 5px; width: 5px;/m);
+  assert.match(rules, /^  \.pane-resizer\.is-vertical::before \{[\s\S]*?left: 2px; width: 1px;/m);
   assert.match(rules, /\.pane-resizer\.is-horizontal \{[\s\S]*?flex: 0 0 9px; height: 9px;/);
   assert.match(rules, /\.pane-resizer\.is-horizontal::before \{[\s\S]*?top: 4px; left: 0; right: 0; height: 1px;/);
-  assert.match(rules, /html\.desktop\.side-collapsed #sideResizer \{ display: none; \}/);
+  assert.match(rules, /html\.side-collapsed #sideResizer \{ display: none; \}/);
+  assert.match(mainScript, /function bindChrome\(\) \{[\s\S]*?initPaneWidths\(\);[\s\S]*?createPaneResizer\("side", "sideResizer", "Resize commit list"\)/);
+  assert.match(html, /:root \{ --revision-side-width: 320px; --revision-ftree-width: 264px; \}/);
   assert.match(html, /\.d-head \{ flex: none; overflow-y: auto; \}/);
   assert.match(html, /\.d-head\.sized \.d-body \{ max-height: none; \}/);
   assert.match(html, /\.d-body \{[^}]*max-height: 26vh; overflow-y: auto;/);
   assert.doesNotMatch(mainScript, /(?:side|ftree|tree)\.style\.width/);
+});
+
+test("commit search requests server-side pages and ignores stale responses", () => {
+  assert.match(staticBody, /Search all commits: author, email, subject, SHA/);
+  assert.match(mainScript, /"&q=" \+ encodeURIComponent\(query\)/);
+  assert.ok(mainScript.includes("filterTimer = setTimeout(function () { loadCommits(0, null); }, 500);"));
+  assert.match(mainScript, /var seq = \+\+logSeq;/);
+  assert.match(mainScript, /if \(seq !== logSeq\) return;/);
+  assert.match(mainScript, /if \(seq === logSeq\) \{\s*state\.loading = false;/);
+  assert.doesNotMatch(mainScript, /function commitMatches\(/);
 });

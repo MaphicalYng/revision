@@ -1,5 +1,7 @@
 # revision
 
+English | [简体中文](README.zh-CN.md)
+
 A zero-dependency web UI for browsing local git repositories: branches, commit history, and **side-by-side commit diffs with aligned line numbers** — old on the left, new on the right, every row numbered on both sides, with word-level highlights on changed tokens.
 
 ![revision desktop app showing a commit diff, file tree, and commit history](docs/revision-desktop.png)
@@ -82,6 +84,16 @@ The desktop build is a standalone application for each platform:
 | Linux | AppImage, x64 |
 
 Launch the app directly: Electron/Chromium and the Node runtime are included, so no system Node.js, npm, terminal, or external browser is needed. **Git is not bundled.** Install Git separately. The app searches `PATH` plus the standard install locations (`/usr/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/snap/bin` on Linux). If Git is missing or cannot run, the app shows a native error with **Retry**.
+
+### macOS DMG
+
+The released DMGs are unsigned and not notarized, so macOS may prevent the downloaded app from opening. After opening the DMG and copying `revision.app` to `/Applications`, remove its quarantine attribute:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/revision.app
+```
+
+Then launch revision normally. Only run this command for an app you trust.
 
 On first launch the app shows a welcome screen instead of opening a repository automatically. Choose a Git repository or a folder whose direct subfolders are repositories; later launches restore the last successfully opened folder. **Open Folder…** uses the native directory picker, and **Open Recent** keeps up to 10 folders and includes **Clear Recent**. Folder discovery is the same as the CLI: the selected folder itself is included when it is a git repository, as are its direct subdirectories containing a `.git` entry. Switching folders does not ask for confirmation because revision is read-only.
 

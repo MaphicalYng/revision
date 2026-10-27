@@ -29,6 +29,8 @@
 
 ## 安装
 
+### npm（CLI / Web）
+
 要求 Node.js >= 18，且 Git 可通过 `PATH` 调用。
 
 ```bash
@@ -39,6 +41,28 @@ npm install -g @maphicalyng/revision
 
 ```bash
 npx @maphicalyng/revision ~/code
+```
+
+### Homebrew（桌面应用）
+
+桌面应用已通过 Cask 支持 macOS（Apple Silicon、Intel）和 Linux（x86_64）。桌面应用不要求 Node.js，Cask 会安装 Git 依赖。
+
+首次使用时添加 Tap：
+
+```bash
+brew tap MaphicalYng/tap
+```
+
+由于应用目前未使用 Apple 开发者证书签名，在 macOS 上安装时请添加 `--no-quarantine`：
+
+```bash
+brew install --cask --no-quarantine MaphicalYng/tap/revision
+```
+
+在 Linux（x86_64）上安装：
+
+```bash
+brew install --cask MaphicalYng/tap/revision
 ```
 
 ## 用法
@@ -85,9 +109,9 @@ revision ~/code
 
 直接启动应用即可：Electron/Chromium 和 Node 运行时均已包含，无需系统安装 Node.js、npm、终端或外部浏览器。**Git 未捆绑在内。** 请单独安装 Git。应用会搜索 `PATH` 及标准安装位置（`/usr/bin`、`/opt/homebrew/bin`、`/usr/local/bin`，以及 Linux 上的 `/snap/bin`）。如果 Git 缺失或无法运行，应用会显示带 **Retry** 的原生错误提示。
 
-### macOS DMG
+### 手动安装 macOS DMG
 
-发布的 DMG 未签名且未经公证，因此 macOS 可能会阻止下载后的应用直接打开。打开 DMG 并将 `revision.app` 复制到 `/Applications` 后，请移除其隔离属性：
+手动安装时，发布的 DMG 未签名且未经公证，因此 macOS 可能会阻止下载后的应用直接打开。打开 DMG 并将 `revision.app` 复制到 `/Applications` 后，请移除其隔离属性：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/revision.app

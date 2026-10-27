@@ -29,6 +29,8 @@ Visual reference: [Linear](https://linear.app)-style dark UI, [GitHub Dark](http
 
 ## Install
 
+### npm (CLI / Web)
+
 Requires Node.js >=18 and Git on `PATH`.
 
 ```bash
@@ -39,6 +41,28 @@ Or run straight away with npx (compiles on demand are not needed — the publish
 
 ```bash
 npx @maphicalyng/revision ~/code
+```
+
+### Homebrew (desktop app)
+
+The desktop app is available as a Cask for macOS (Apple Silicon and Intel) and Linux (x86_64). It does not require Node.js, and the Cask installs Git as a dependency.
+
+Add the tap once:
+
+```bash
+brew tap MaphicalYng/tap
+```
+
+On macOS, install with `--no-quarantine` because the app is not currently signed with an Apple Developer certificate:
+
+```bash
+brew install --cask --no-quarantine MaphicalYng/tap/revision
+```
+
+On Linux (x86_64):
+
+```bash
+brew install --cask MaphicalYng/tap/revision
 ```
 
 ## Usage
@@ -85,9 +109,9 @@ The desktop build is a standalone application for each platform:
 
 Launch the app directly: Electron/Chromium and the Node runtime are included, so no system Node.js, npm, terminal, or external browser is needed. **Git is not bundled.** Install Git separately. The app searches `PATH` plus the standard install locations (`/usr/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/snap/bin` on Linux). If Git is missing or cannot run, the app shows a native error with **Retry**.
 
-### macOS DMG
+### Manual macOS DMG installation
 
-The released DMGs are unsigned and not notarized, so macOS may prevent the downloaded app from opening. After opening the DMG and copying `revision.app` to `/Applications`, remove its quarantine attribute:
+For a manual DMG installation, the released DMGs are unsigned and not notarized, so macOS may prevent the downloaded app from opening. After opening the DMG and copying `revision.app` to `/Applications`, remove its quarantine attribute:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/revision.app

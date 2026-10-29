@@ -46,6 +46,7 @@ export function renderPage(): string {
       <div class="dd-list" id="branchDdList" role="listbox"></div>
     </div>
   </div>
+  <button id="pullBtn" class="ibtn" title="Pull selected branch" aria-label="pull selected branch" disabled><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13.5h10"/></svg></button>
   <div class="sp"></div>
   <div class="connection" id="connectionStatus" data-state="checking" role="status" aria-live="polite" aria-atomic="true" title="Connecting to server"><span class="connection-dot" aria-hidden="true"></span><span id="connectionText">Connecting</span></div>
   <button id="themeBtn" class="ibtn" title="Toggle theme" aria-label="toggle theme"></button>
@@ -67,6 +68,17 @@ export function renderPage(): string {
   <main class="main" id="main"></main>
 </div>
 <footer class="version" aria-label="Build information">Built <time datetime="${BUILD_INFO.buildDate}">${BUILD_INFO.buildDate.slice(0, 10)}</time><span aria-hidden="true">·</span><code title="${BUILD_INFO.commitId}">${BUILD_INFO.commitId.slice(0, 12)}</code></footer>
+<div class="modal-backdrop" id="deleteDialog" hidden>
+  <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogMessage">
+    <h2 id="deleteDialogTitle">Delete untracked file?</h2>
+    <p id="deleteDialogMessage">This file will be permanently deleted. This cannot be undone.</p>
+    <code class="modal-path" id="deleteDialogPath"></code>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn" id="cancelDelete">Cancel</button>
+      <button type="button" class="modal-btn danger" id="confirmDelete">Delete file</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast" role="status"></div>
 <script>${HLJS_SRC}</script>
 <script>${JS}</script>
@@ -242,6 +254,9 @@ body {
   border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
 }
 .ibtn:hover { color: var(--text); border-color: var(--border-hover); }
+.ibtn:disabled { opacity: 0.45; cursor: default; }
+.ibtn:disabled:hover { color: var(--text-2); border-color: var(--border); }
+.ibtn.danger:hover { color: var(--del-num); border-color: var(--del-num); }
 .ibtn.on { color: var(--accent); border-color: var(--accent); }
 html.desktop .desktop-open-folder { flex: none; white-space: nowrap; }
 html.desktop .empty .desktop-open-folder { margin-top: 12px; }
@@ -380,7 +395,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 }
 .diffpath { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font: 500 12.5px var(--mono); color: var(--text-2); }
 .diffpath .full { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.diffpath .ibtn { width: 26px; height: 26px; margin-left: auto; flex: none; }
+.diffpath .ibtn { width: 26px; height: 26px; flex: none; }
+.diffpath #copyPath { margin-left: auto; }
 .diffpath { flex: none; }
 .diff-scroll { flex: 1; min-height: 0; overflow: auto; font: 12.5px/20px var(--mono); }
 .diff { display: grid; grid-template-columns: 46px minmax(0, max-content) 46px minmax(0, max-content); width: max-content; min-width: 100%; }
@@ -448,6 +464,39 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 .diff-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font: 13px var(--sans); }
 .diff-empty code { font: 12px var(--mono); background: var(--panel-3); padding: 2px 8px; border-radius: 5px; }
 .binary-note { padding: 30px 20px; text-align: center; color: var(--text-3); }
+
+/* ---------- confirmation dialog ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center; padding: 20px;
+  background: rgba(0, 0, 0, 0.36);
+}
+.modal-backdrop[hidden] { display: none; }
+.modal {
+  width: min(420px, 100%); padding: 20px;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+}
+.modal h2 { font-size: 16px; font-weight: 650; line-height: 1.4; }
+.modal p { margin-top: 8px; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.modal-path {
+  display: block; margin-top: 14px; padding: 8px 10px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 7px;
+  font: 12px/1.5 var(--mono); overflow-wrap: anywhere;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.modal-btn {
+  min-width: 76px; height: 32px; padding: 0 13px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 7px;
+  font: 550 12.5px var(--sans); cursor: pointer;
+}
+.modal-btn:hover { border-color: var(--border-hover); background: var(--panel-3); }
+.modal-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.modal-btn.danger { background: var(--del-num); color: var(--bg); border-color: transparent; }
+.modal-btn.danger:hover { filter: brightness(0.92); }
 
 /* ---------- toast ---------- */
 .toast {
@@ -605,6 +654,41 @@ function refreshCurrent() {
     ? openRepo(state.repo, state.branch, state.commit ? state.commit.sha : null)
     : boot();
 }
+function selectedBranch() {
+  return state.branches.find(function (b) { return b.name === state.branch; }) || null;
+}
+function updatePullButton() {
+  var btn = $("pullBtn");
+  var branch = selectedBranch();
+  var canPull = !!branch && !branch.remote && branch.current;
+  btn.disabled = !canPull || state.pulling;
+  btn.title = state.pulling ? "Pulling " + state.branch + "…" :
+    !branch ? "No branch selected" :
+    branch.remote ? "Select a local branch to pull" :
+    !branch.current ? "Only the checked-out branch can be pulled" :
+    "Pull " + branch.name;
+}
+function pullSelectedBranch() {
+  var branch = selectedBranch();
+  if (!branch || branch.remote || !branch.current || state.pulling) return;
+  toast("Pulling " + branch.name + "…");
+  state.pulling = true;
+  updatePullButton();
+  var operation = async function () {
+    try {
+      await api("/api/repo/" + encodeURIComponent(state.repo) + "/pull?branch=" + encodeURIComponent(branch.name), "POST");
+      toast("Pulled " + branch.name);
+      await refreshCurrent();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      state.pulling = false;
+      updatePullButton();
+    }
+  }();
+  spinWhile($("pullBtn"), operation);
+  return operation;
+}
 function clampWidth(cfg, value) {
   return Math.min(cfg.max, Math.max(cfg.min, Math.round(value)));
 }
@@ -743,11 +827,11 @@ var repoDd = createDropdown("repoDd", {
   onPick: function (v) { openRepo(v, null, null); }
 });
 var branchDd = createDropdown("branchDd", {
-  onPick: function (v) { state.branch = v; spinWhile($("branchDdBtn"), loadCommits(0, null)); loadWork(); }
+  onPick: function (v) { state.branch = v; updatePullButton(); spinWhile($("branchDdBtn"), loadCommits(0, null)); loadWork(); }
 });
 
 var state = {
-  repos: [], repo: null, branches: [], branch: null,
+  repos: [], repo: null, branches: [], branch: null, pulling: false,
   commits: [], hasMore: false, loading: false,
   commit: null, pendingSha: null, files: [], fileSel: null, fileCache: {}, filter: "",
   work: null, view: "commit", treeOpen: {}, fileQuery: "",
@@ -799,11 +883,11 @@ function startConnectionMonitor() {
   setConnectionState("checking");
   checkConnection();
 }
-async function api(path) {
+async function api(path, method) {
   var headers = { "Accept": "application/json" };
   if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
   var r;
-  try { r = await fetch(path, { headers: headers }); }
+  try { r = await fetch(path, { headers: headers, method: method || "GET" }); }
   catch (e) { setConnectionState("offline"); throw e; }
   setConnectionState("online");
   var body = null;
@@ -893,6 +977,7 @@ async function openRepo(id, branchWanted, commitWanted) {
     : (locals.find(function (x) { return x.current; }) || locals[0] || state.branches[0] || {}).name;
   state.branch = pick || null;
   branchDd.setValue(pick || "", pick || "(no branches)");
+  updatePullButton();
   await loadCommits(0, commitWanted);
   loadWork();
 }
@@ -1040,6 +1125,63 @@ async function selectWork() {
   state.fileSel = files[0].path;
   renderWorkDetail();
   renderCommits();
+}
+
+var deleteDialogState = { resolve: null, previousFocus: null };
+function confirmDeleteDialog(path) {
+  if (deleteDialogState.resolve) return Promise.resolve(false);
+  return new Promise(function (resolve) {
+    deleteDialogState.resolve = resolve;
+    deleteDialogState.previousFocus = document.activeElement;
+    $("deleteDialogPath").textContent = path;
+    $("deleteDialog").hidden = false;
+    $("cancelDelete").focus();
+  });
+}
+function closeDeleteDialog(confirmed) {
+  var resolve = deleteDialogState.resolve;
+  if (!resolve) return;
+  var previousFocus = deleteDialogState.previousFocus;
+  deleteDialogState.resolve = null;
+  deleteDialogState.previousFocus = null;
+  $("deleteDialog").hidden = true;
+  if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+  resolve(confirmed);
+}
+function bindDeleteDialog() {
+  var dialog = $("deleteDialog");
+  $("cancelDelete").onclick = function () { closeDeleteDialog(false); };
+  $("confirmDelete").onclick = function () { closeDeleteDialog(true); };
+  dialog.onclick = function (e) { if (e.target === dialog) closeDeleteDialog(false); };
+  dialog.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      closeDeleteDialog(false);
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (e.key === "Tab") {
+      var first = $("cancelDelete"), last = $("confirmDelete");
+      if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+      else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+    }
+  });
+}
+async function deleteUntracked(f) {
+  if (state.view !== "work" || f.status !== "untracked") return;
+  if (!(await confirmDeleteDialog(f.path))) return;
+  if (state.view !== "work" || state.fileSel !== f.path) return;
+  var repo = state.repo;
+  var btn = $("deleteUntracked");
+  if (btn) btn.disabled = true;
+  try {
+    await api("/api/repo/" + encodeURIComponent(repo) + "/work/untracked?file=" + encodeURIComponent(f.path), "DELETE");
+    toast("Deleted " + f.path);
+    if (state.repo !== repo) return;
+    await loadWork();
+    if (state.view === "work") await selectWork();
+  } catch (e) {
+    toast(e.message);
+    if (btn) btn.disabled = false;
+  }
 }
 
 function renderWorkDetail() {
@@ -1233,7 +1375,9 @@ async function renderDiff() {
   var wholeOn = !!(exp && exp.whole);
   var corners = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2h-3a1 1 0 0 0-1 1v3M13.5 6.5v-3a1 1 0 0 0-1-1h-3M2 9.5v3a1 1 0 0 0 1 1h3M9.5 14h3a1 1 0 0 0 1-1v-3"/></svg>';
   var pathLabel = f.status === "renamed" ? esc(f.oldPath) + " → " + esc(f.path) : esc(f.path);
-  var head = '<div class="diffpath"><span class="full">' + pathLabel + '</span>' +
+  var deleteButton = f.status === "untracked" ?
+    '<button class="ibtn danger" id="deleteUntracked" title="delete untracked file" aria-label="delete untracked file"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.5 6.5v4.5M9.5 6.5v4.5"/></svg></button>' : "";
+  var head = '<div class="diffpath"><span class="full">' + pathLabel + '</span>' + deleteButton +
     '<button class="ibtn" id="copyPath" title="copy path" aria-label="copy path"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M11 5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5.5A1.5 1.5 0 0 0 4 11h1"/></svg></button>' +
     '<button class="ibtn' + (wholeOn ? " on" : "") + '" id="wholeBtn" style="margin-left:4px" title="' + (wholeOn ? "collapse back to the diff" : "expand to the whole file") +
     '" aria-label="toggle whole file view">' + corners + "</button></div>";
@@ -1248,6 +1392,7 @@ async function renderDiff() {
 
   if (f.binary) {
     box.innerHTML = head + '<div class="binary-note">Binary file — diff not shown.</div>';
+    bindDiffButtons(f);
     return;
   }
 
@@ -1262,6 +1407,7 @@ async function renderDiff() {
     data = await api(url);
   } catch (e) {
     box.innerHTML = head + '<div class="diff-empty">Failed to load diff: ' + esc(e.message) + "</div>";
+    bindDiffButtons(f);
     return;
   }
   if (state.fileSel !== f.path) return; // user switched while loading
@@ -1277,6 +1423,8 @@ function bindDiffButtons(f) {
   if (b) b.onclick = function () { copyText(f.path, "Path copied"); };
   var w = $("wholeBtn");
   if (w) w.onclick = function () { toggleWhole(f); };
+  var del = $("deleteUntracked");
+  if (del) del.onclick = function () { deleteUntracked(f); };
 }
 
 /* Lazy background fetch of the full file on both diff sides; powers the
@@ -1924,10 +2072,12 @@ function bindDesktop() {
 function bindChrome() {
   applyTheme(document.documentElement.getAttribute("data-theme") || "light");
   initPaneWidths();
+  bindDeleteDialog();
   var side = document.querySelector(".side");
   side.insertAdjacentElement("afterend",
     createPaneResizer("side", "sideResizer", "Resize commit list"));
   $("themeBtn").onclick = toggleTheme;
+  $("pullBtn").onclick = pullSelectedBranch;
   $("collapseSide").onclick = toggleSide;
   $("expandSide").onclick = toggleSide;
   $("main").addEventListener("input", function (e) {
@@ -1947,6 +2097,7 @@ function bindChrome() {
     else selectCommit(btn.getAttribute("data-sha"));
   };
   document.addEventListener("keydown", function (e) {
+    if (deleteDialogState.resolve) return;
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var curSha = state.pendingSha || (state.commit && state.commit.sha);

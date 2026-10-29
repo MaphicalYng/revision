@@ -171,6 +171,17 @@ export async function branches(repo: string): Promise<BranchInfo[]> {
   return [...locals, ...remotes];
 }
 
+export async function pullBranch(repo: string, branch: string): Promise<void> {
+  const selected = (await branches(repo)).find((b) => b.name === branch && !b.remote);
+  if (!selected) throw new GitError(`not a local branch: ${branch}`, -1);
+  if (!selected.current) throw new GitError(`branch is not checked out: ${branch}`, -1);
+  await git(repo, ["pull"]);
+}
+
+export async function removeUntrackedFile(repo: string, file: string): Promise<void> {
+  await git(repo, ["clean", "-f", "--", file]);
+}
+
 // ------------------------------------------------------------------ log ---
 
 export interface CommitSummary {

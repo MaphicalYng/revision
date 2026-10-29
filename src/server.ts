@@ -16,10 +16,12 @@ import {
   GitError,
   listRepos,
   branches,
+  pullBranch,
   log,
   commitDetail,
   fileDiff,
   workStatus,
+  removeUntrackedFile,
   workDiffText,
   workFileText,
   blobAtRev,
@@ -177,6 +179,17 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         return;
       }
 
+      g = m(/^\/api\/repo\/([^/]+)\/pull$/);
+      if (req.method === "POST" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const branch = url.searchParams.get("branch") ?? "";
+        if (!branch || branch.length > 300) throw new HttpError("invalid branch", 400);
+        await pullBranch(rp, branch);
+        json(res, 200, { ok: true, branch });
+        return;
+      }
+
       g = m(/^\/api\/repo\/([^/]+)\/log$/);
       if (req.method === "GET" && g) {
         const rp = await repoPath(res, decodeURIComponent(g[1]));
@@ -203,6 +216,19 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         const rp = await repoPath(res, decodeURIComponent(g[1]));
         if (!rp) return;
         json(res, 200, await workStatus(rp));
+        return;
+      }
+      g = m(/^\/api\/repo\/([^/]+)\/work\/untracked$/);
+      if (req.method === "DELETE" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const file = safeFile(url.searchParams.get("file") ?? "");
+        const st = await workStatus(rp);
+        const meta = st.files.find((f) => f.path === file);
+        if (!meta) throw new HttpError(`file not among working tree changes: ${file}`, 404);
+        if (!meta.untracked) throw new HttpError(`not an untracked file: ${file}`, 400);
+        await removeUntrackedFile(rp, file);
+        json(res, 200, { ok: true, file });
         return;
       }
       g = m(/^\/api\/repo\/([^/]+)\/work\/diff$/);

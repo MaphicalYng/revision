@@ -105,3 +105,25 @@ test("fully untracked directories carry the untracked badge", () => {
   assert.match(mainScript, /n\.untracked = total > 0 && total === untracked/);
   assert.ok(mainScript.includes(`(dn.untracked ? '<span class="st U" title="Untracked directory">U</span>' : "")`));
 });
+
+test("pull is limited to the checked-out local branch and untracked deletion requires confirmation", () => {
+  assert.match(staticBody, /id="pullBtn"[^>]*aria-label="pull selected branch"[^>]*disabled/);
+  assert.match(mainScript, /branch\.remote \? "Select a local branch to pull"/);
+  assert.match(mainScript, /!branch\.current \? "Only the checked-out branch can be pulled"/);
+  assert.match(mainScript, /toast\("Pulling " \+ branch\.name \+ "…"\)/);
+  assert.match(mainScript, /\/pull\?branch=" \+ encodeURIComponent\(branch\.name\), "POST"/);
+  assert.match(mainScript, /toast\("Pulled " \+ branch\.name\)/);
+  assert.match(html, /\.diffpath #copyPath \{ margin-left: auto; \}/);
+  assert.doesNotMatch(html, /\.diffpath \.ibtn \{[^}]*margin-left: auto/);
+  assert.match(mainScript, /f\.status !== "untracked"/);
+  assert.match(staticBody, /id="deleteDialog" hidden/);
+  assert.match(staticBody, /role="alertdialog" aria-modal="true"/);
+  assert.match(staticBody, /id="deleteDialogPath"/);
+  assert.match(staticBody, /id="cancelDelete"/);
+  assert.match(staticBody, /id="confirmDelete"/);
+  assert.match(mainScript, /await confirmDeleteDialog\(f\.path\)/);
+  assert.match(mainScript, /previousFocus\.focus\(\)/);
+  assert.match(mainScript, /e\.key === "Escape"/);
+  assert.doesNotMatch(mainScript, /window\.confirm/);
+  assert.match(mainScript, /\/work\/untracked\?file=" \+ encodeURIComponent\(f\.path\), "DELETE"/);
+});

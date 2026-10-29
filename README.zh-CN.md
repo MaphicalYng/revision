@@ -125,7 +125,7 @@ xattr -dr com.apple.quarantine /Applications/revision.app
 
 随后即可正常启动 revision。请仅对信任的应用执行此命令。
 
-首次启动时，应用会显示欢迎页，而不是自动打开仓库。请选择一个 Git 仓库，或选择一个直接子目录为仓库的文件夹；后续启动会恢复上次成功打开的文件夹。**Open Folder…** 使用原生目录选择器，**Open Recent** 最多保留 10 个文件夹，并提供 **Clear Recent**。文件夹发现规则与 CLI 相同：如果所选文件夹本身是 Git 仓库，会将其包含在内；其包含 `.git` 条目的直接子目录也会被包含。切换文件夹时不会要求确认，因为 revision 是只读的。
+首次启动时，应用会显示欢迎页，而不是自动打开仓库。请选择一个 Git 仓库，或选择一个直接子目录为仓库的文件夹；后续启动会恢复上次成功打开的文件夹。**Open Folder…** 使用原生目录选择器，**Open Recent** 最多保留 10 个文件夹，并提供 **Clear Recent**。文件夹发现规则与 CLI 相同：如果所选文件夹本身是 Git 仓库，会将其包含在内；其包含 `.git` 条目的直接子目录也会被包含。切换文件夹时不会要求确认。
 
 ### 桌面键盘快捷键
 
@@ -162,12 +162,12 @@ npm run dist:desktop  # 构建本地安装包，不发布
 ## 功能
 
 - **仓库发现**——目标目录本身为仓库时会被包含，同时扫描下一层目录；支持 worktree 和 submodule（`.git` 文件或目录），名称冲突时添加后缀，最多 100 个仓库；每次刷新浏览器时重新扫描
-- **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中
+- **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中；可从标头 Pull 当前选中的已检出本地分支，并显示开始和完成提示
 - **可搜索下拉框**——仓库和分支选择器使用自定义下拉框（非原生 `<select>`），支持输入筛选、键盘导航（↑↓ Enter Esc）、分组分支列表（Local / Remote），以及标记当前选中项
 - **文件树搜索**——文件树顶部的筛选框可实时缩小到匹配路径（显示扁平化完整路径）
 - **Commit 列表**——可折叠侧栏（记住偏好），每页 100 条并提供“Load more”；服务端全历史搜索（匹配标题、作者名称或邮箱和 SHA——短 SHA 或完整 40 字符 SHA，支持任意长度前缀）、合并 Commit 标记、相对时间戳
 - **文件树**——变更文件以可展开目录树显示在 Diff 旁（不是标签栏），提供每个文件和目录的 `+x −y` 统计及 `A`/`M`/`D`/`R`/`U` 状态标记；自动展开指向所选文件的路径，其余路径默认折叠
-- **Working tree**——Commit 列表顶部的“Working tree”条目显示未提交变更（合并暂存和未暂存内容，与 HEAD 比较）；支持重命名感知的文件状态、来自 numstat 的每文件 `+x −y` 统计、将未跟踪文件渲染为全新行 Diff、文件和完全未跟踪目录上的 `U` 标记，以及无提交分支支持
+- **Working tree**——Commit 列表顶部的“Working tree”条目显示未提交变更（合并暂存和未暂存内容，与 HEAD 比较）；支持重命名感知的文件状态、来自 numstat 的每文件 `+x −y` 统计、将未跟踪文件渲染为全新行 Diff、文件和完全未跟踪目录上的 `U` 标记，以及无提交分支支持；可通过 Diff 标头删除未跟踪文件，删除前显示应用内确认弹窗
 - **Commit 详情**——完整消息正文、作者、精确日期、可复制的 SHA 和文件路径，以及 `files changed / +ins / −del` 汇总统计
 - **并排 Diff**——旧文件在左、新文件在右，各自带行号；删除和新增行段逐行配对，使两列保持对齐，未配对的多余行在对侧显示空单元格
 - **语法高亮**——根据文件扩展名高亮 Diff 行（32 种扩展名映射语言，来自内置的 37 语言 [highlight.js](https://highlightjs.org) common bundle——无 CDN、无额外依赖，仍是一个自包含 HTML 页面）；GitHub 明暗 token 配色跟随主题切换；词级变更标记叠加在高亮行上，使跨变更的字符串和注释保留颜色；超过 5000 个 Diff 行的文件会跳过高亮以保持速度
@@ -215,10 +215,12 @@ tests/
 ```
 page --GET /api/repos----------------> server --fs scan------------> 仓库列表
 page --GET /api/repo/:id/branches----> server --git branch---------> 本地 + 远程分支
+page --POST /api/repo/:id/pull?branch-> server --git pull----------> 更新已检出的本地分支
 page --GET /api/health---------------> server（需要认证的存活检查）
 page --GET /api/repo/:id/log?branch--> server --git log------------> Commit 行
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> 文件列表 + 统计
 page --GET /api/repo/:id/work--------> server --git status/diff-----> working-tree 文件 + 统计
+page --DELETE .../work/untracked?file-> server --git clean----------> 删除已确认的未跟踪文件
 page --GET .../diff?file=-----------> server --git diff + parse---> { hunks: [{ rows }] }
 page --GET .../work/diff?file=------> server --git diff + parse---> working-tree hunks
 page --GET .../file?file=-----------> server --git cat-file/fs read--> { old, new } 完整文本（用于折叠上下文）

@@ -125,7 +125,7 @@ xattr -dr com.apple.quarantine /Applications/revision.app
 
 Then launch revision normally. Only run this command for an app you trust.
 
-On first launch the app shows a welcome screen instead of opening a repository automatically. Choose a Git repository or a folder whose direct subfolders are repositories; later launches restore the last successfully opened folder. **Open Folder…** uses the native directory picker, and **Open Recent** keeps up to 10 folders and includes **Clear Recent**. Folder discovery is the same as the CLI: the selected folder itself is included when it is a git repository, as are its direct subdirectories containing a `.git` entry. Switching folders does not ask for confirmation because revision is read-only.
+On first launch the app shows a welcome screen instead of opening a repository automatically. Choose a Git repository or a folder whose direct subfolders are repositories; later launches restore the last successfully opened folder. **Open Folder…** uses the native directory picker, and **Open Recent** keeps up to 10 folders and includes **Clear Recent**. Folder discovery is the same as the CLI: the selected folder itself is included when it is a git repository, as are its direct subdirectories containing a `.git` entry. Switching folders does not ask for confirmation.
 
 ### Desktop keyboard shortcuts
 
@@ -162,12 +162,12 @@ Packages are written to `release/`. Unsigned local packages can be used for veri
 ## Features
 
 - **Repo discovery** — the target directory itself when it is a repo, plus one level deep, worktrees and submodules included (a `.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
-- **Branches** — local branches with the current one preselected; remote branches under an optgroup
+- **Branches** — local branches with the current one preselected; remote branches under an optgroup; pull the selected checked-out local branch from the header, with start and completion toasts
 - **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking
 - **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type
 - **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", server-side full-history search (matches subject, author name or email, and SHA — short or full 40-char, any prefix length), merge-commit markers, relative timestamps
 - **File tree** — changed files rendered as an expandable directory tree beside the diff (not a tab strip), with per-file and per-directory `+x −y` counts and `A`/`M`/`D`/`R`/`U` status badges; the chain to the selected file auto-expands, everything else starts collapsed
-- **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs with `U` badges on files and fully untracked directories, unborn-branch support
+- **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs with `U` badges on files and fully untracked directories, unborn-branch support; untracked files can be permanently deleted from the diff header after an in-app confirmation
 - **Commit detail** — full message body, author, exact date, copyable SHA and file paths, aggregate `files changed / +ins / −del` stats
 - **Side-by-side diff** — the old file on the left, the new file on the right, each with its own line numbers; deletion/addition runs pair row-by-row so both columns stay aligned; unpaired leftovers render with an empty opposite cell
 - **Syntax highlighting** — diff rows are highlighted per file extension (32 extension-mapped languages from the vendored 37-language [highlight.js](https://highlightjs.org) common bundle — no CDN, no extra dependency, still one self-contained HTML page); GitHub-light/dark token palettes that follow the theme toggle; word-level change marks overlay the highlighted line so strings and comments spanning a change keep their colors; files above 5000 diff rows skip highlighting to stay fast
@@ -215,10 +215,12 @@ Data flow:
 ```
 page --GET /api/repos----------------> server --fs scan------------> repo list
 page --GET /api/repo/:id/branches----> server --git branch---------> local + remote branches
+page --POST /api/repo/:id/pull?branch-> server --git pull----------> checked-out local branch update
 page --GET /api/health----------------> server (authenticated liveness check)
 page --GET /api/repo/:id/log?branch--> server --git log------------> commit rows
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> file list + stats
 page --GET /api/repo/:id/work--------> server --git status/diff-----> working-tree files + stats
+page --DELETE .../work/untracked?file-> server --git clean----------> confirmed untracked-file deletion
 page --GET .../diff?file=------------> server --git diff + parse---> { hunks: [{ rows }] }
 page --GET .../work/diff?file=-------> server --git diff + parse---> working-tree hunks
 page --GET .../file?file=-------------> server --git cat-file/fs read--> { old, new } full texts (powers collapsed context)

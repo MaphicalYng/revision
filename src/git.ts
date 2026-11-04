@@ -500,6 +500,21 @@ export async function hasHead(repo: string): Promise<boolean> {
   }
 }
 
+/** Add an untracked file or a fully untracked directory to the index. */
+export async function addUntracked(repo: string, filePath: string): Promise<void> {
+  await git(repo, ["add", "--", filePath]);
+}
+
+/** Unstage newly added paths while leaving their working-tree files intact. */
+export async function unstageAdded(repo: string, filePath: string): Promise<void> {
+  await git(repo, ["rm", "--cached", "-r", "-q", "-f", "--", filePath]);
+}
+
+/** Commit tracked modifications together with anything already staged. */
+export async function commitTrackedChanges(repo: string, message: string): Promise<void> {
+  await git(repo, ["commit", "-a", "-m", message, "--"]);
+}
+
 /**
  * Working tree status: staged + unstaged + untracked, rename-aware.
  * adds/dels/binary come from `git diff HEAD --numstat` (staged-only on

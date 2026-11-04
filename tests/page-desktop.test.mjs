@@ -106,6 +106,25 @@ test("fully untracked directories carry the untracked badge", () => {
   assert.ok(mainScript.includes(`(dn.untracked ? '<span class="st U" title="Untracked directory">U</span>' : "")`));
 });
 
+test("working tree supports adding untracked paths and committing tracked changes", () => {
+  assert.match(staticBody, /id="workContextMenu"[^>]*hidden/);
+  assert.match(staticBody, /id="addToGit"[^>]*>Add to Git<\/button>/);
+  assert.match(staticBody, /id="undoAdd"[^>]*>Undo Add<\/button>/);
+  assert.match(mainScript, /showWorkContextMenu\(b\.getAttribute\("data-dir"\), true, e\)/);
+  assert.match(mainScript, /showWorkContextMenu\(b\.getAttribute\("data-path"\), false, e\)/);
+  assert.match(mainScript, /files\.every\(function \(f\) \{ return f\.untracked; \}\)/);
+  assert.match(mainScript, /stagedAdded: f\.code\.charAt\(0\) === "A"/);
+  assert.match(mainScript, /files\.every\(function \(f\) \{ return f\.stagedAdded; \}\)/);
+  assert.match(mainScript, /\/work\/untracked\?file=" \+ encodeURIComponent\(target\.path\), "POST"/);
+  assert.match(mainScript, /\/work\/added\?file=" \+ encodeURIComponent\(target\.path\), "DELETE"/);
+  assert.match(mainScript, /id="commitTracked">Commit tracked…<\/button>/);
+  assert.match(staticBody, /id="commitDialog" hidden/);
+  assert.match(staticBody, /<textarea class="commit-message" id="commitMessage"[^>]*required/);
+  assert.match(mainScript, /\/work\/commit", "POST", \{ message: message \}/);
+  assert.match(mainScript, /commitDialogState\.busy/);
+  assert.match(staticBody, /Untracked files that have not been added are left alone\./);
+});
+
 test("pull supports every local branch and untracked deletion requires confirmation", () => {
   assert.match(staticBody, /id="pullBtn"[^>]*aria-label="pull selected branch"[^>]*disabled/);
   assert.match(mainScript, /var canPull = !!branch && !branch\.remote;/);

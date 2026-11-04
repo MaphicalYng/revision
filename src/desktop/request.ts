@@ -62,6 +62,7 @@ export async function handleDesktopRequest(
     return await fetchImpl(target.toString(), {
       method: request.method,
       headers,
+      body: request.method === "POST" ? await request.text() : undefined,
       cache: "no-store",
       redirect: "manual",
     });

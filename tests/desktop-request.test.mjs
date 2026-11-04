@@ -33,6 +33,23 @@ for (const [method, path] of [
   });
 }
 
+test("desktop proxy forwards JSON commit bodies", async () => {
+  const payload = JSON.stringify({ message: "Work update\n\nBody" });
+  let forwardedBody;
+  const response = await handleDesktopRequest(
+    new Request("revision://app/api/repo/demo/work/commit", {
+      method: "POST", headers: { "content-type": "application/json" }, body: payload,
+    }),
+    session,
+    async (_input, init) => {
+      forwardedBody = init.body;
+      return new Response('{"ok":true}', { status: 200 });
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(forwardedBody, payload);
+});
+
 test("desktop proxy keeps read requests and rejects unsupported methods", async () => {
   const read = await handleDesktopRequest(
     new Request("revision://app/api/health"),

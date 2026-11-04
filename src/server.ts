@@ -21,6 +21,9 @@ import {
   commitDetail,
   fileDiff,
   workStatus,
+  addUntracked,
+  unstageAdded,
+  commitTrackedChanges,
   removeUntrackedFile,
   workDiffText,
   workFileText,
@@ -96,6 +99,24 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
     const payload = JSON.stringify(body);
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...SECURITY_HEADERS });
     res.end(payload);
+  }
+
+  async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buffer.length;
+      if (size > 64 * 1024) throw new HttpError("JSON body too large", 413);
+      chunks.push(buffer);
+    }
+    try {
+      const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("not an object");
+      return body as Record<string, unknown>;
+    } catch {
+      throw new HttpError("invalid JSON body", 400);
+    }
   }
 
   function fail(res: http.ServerResponse, err: unknown): void {
@@ -219,6 +240,22 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         return;
       }
       g = m(/^\/api\/repo\/([^/]+)\/work\/untracked$/);
+      if (req.method === "POST" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const file = safeFile(url.searchParams.get("file") ?? "");
+        const st = await workStatus(rp);
+        const exact = st.files.find((f) => f.path === file);
+        const descendants = exact ? [] : st.files.filter((f) => f.path.startsWith(file + "/"));
+        if (exact && !exact.untracked) throw new HttpError(`not an untracked file: ${file}`, 400);
+        if (!exact && !descendants.length) throw new HttpError(`path not among working tree changes: ${file}`, 404);
+        if (descendants.some((f) => !f.untracked)) {
+          throw new HttpError(`directory contains tracked changes; add untracked files individually: ${file}`, 400);
+        }
+        await addUntracked(rp, file);
+        json(res, 200, { ok: true, file });
+        return;
+      }
       if (req.method === "DELETE" && g) {
         const rp = await repoPath(res, decodeURIComponent(g[1]));
         if (!rp) return;
@@ -229,6 +266,40 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         if (!meta.untracked) throw new HttpError(`not an untracked file: ${file}`, 400);
         await removeUntrackedFile(rp, file);
         json(res, 200, { ok: true, file });
+        return;
+      }
+      g = m(/^\/api\/repo\/([^/]+)\/work\/added$/);
+      if (req.method === "DELETE" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const file = safeFile(url.searchParams.get("file") ?? "");
+        const st = await workStatus(rp);
+        const exact = st.files.find((f) => f.path === file);
+        const descendants = exact ? [] : st.files.filter((f) => f.path.startsWith(file + "/"));
+        const newlyAdded = (f: (typeof st.files)[number]) => f.code[0] === "A";
+        if (exact && !newlyAdded(exact)) throw new HttpError(`not a newly added file: ${file}`, 400);
+        if (!exact && !descendants.length) throw new HttpError(`path not among working tree changes: ${file}`, 404);
+        if (descendants.some((f) => !newlyAdded(f))) {
+          throw new HttpError(`directory contains changes that are not newly added: ${file}`, 400);
+        }
+        await unstageAdded(rp, file);
+        json(res, 200, { ok: true, file });
+        return;
+      }
+      g = m(/^\/api\/repo\/([^/]+)\/work\/commit$/);
+      if (req.method === "POST" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const body = await readJsonBody(req);
+        if (typeof body.message !== "string" || body.message.length > 10000) {
+          throw new HttpError("invalid commit message", 400);
+        }
+        const message = body.message.trim();
+        if (!message) throw new HttpError("commit message must not be empty", 400);
+        const st = await workStatus(rp);
+        if (!st.files.some((f) => !f.untracked)) throw new HttpError("no tracked changes to commit", 400);
+        await commitTrackedChanges(rp, message);
+        json(res, 200, { ok: true });
         return;
       }
       g = m(/^\/api\/repo\/([^/]+)\/work\/diff$/);

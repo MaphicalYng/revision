@@ -130,3 +130,93 @@ test("delete removes only an existing untracked file", async (t) => {
   const missing = await fetch(`${url}/api/repo/repo/work/untracked?file=${encodeURIComponent("notes/scratch.txt")}`, { method: "DELETE" });
   assert.equal(missing.status, 404);
 });
+
+test("add stages untracked files and directories, and commit excludes remaining untracked files", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "revision-add-commit-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repo = path.join(root, "repo");
+  await mkdir(repo);
+  await git(repo, "init", "--quiet", "--initial-branch=main");
+  await git(repo, "config", "user.name", "Test User");
+  await git(repo, "config", "user.email", "test@example.com");
+  await mkdir(path.join(repo, "mixed"));
+  await writeFile(path.join(repo, "tracked.txt"), "tracked\n");
+  await writeFile(path.join(repo, "mixed", "tracked.txt"), "tracked\n");
+  await git(repo, "add", "tracked.txt", "mixed/tracked.txt");
+  await commit(repo, "Initial");
+
+  await writeFile(path.join(repo, "tracked.txt"), "modified\n");
+  await writeFile(path.join(repo, "mixed", "tracked.txt"), "modified\n");
+  await writeFile(path.join(repo, "mixed", "new.txt"), "new\n");
+  await writeFile(path.join(repo, "scratch.txt"), "scratch\n");
+  await mkdir(path.join(repo, "notes", "nested"), { recursive: true });
+  await writeFile(path.join(repo, "notes", "a.txt"), "a\n");
+  await writeFile(path.join(repo, "notes", "nested", "b.txt"), "b\n");
+  await writeFile(path.join(repo, "left-alone.txt"), "untracked\n");
+  const url = await serve(t, root);
+
+  const tracked = await fetch(`${url}/api/repo/repo/work/untracked?file=tracked.txt`, { method: "POST" });
+  assert.equal(tracked.status, 400);
+  assert.match((await tracked.json()).error, /not an untracked file/);
+  const mixed = await fetch(`${url}/api/repo/repo/work/untracked?file=mixed`, { method: "POST" });
+  assert.equal(mixed.status, 400);
+  assert.match((await mixed.json()).error, /directory contains tracked changes/);
+
+  const fileAdd = await fetch(`${url}/api/repo/repo/work/untracked?file=scratch.txt`, { method: "POST" });
+  assert.equal(fileAdd.status, 200);
+  const directoryAdd = await fetch(`${url}/api/repo/repo/work/untracked?file=notes`, { method: "POST" });
+  assert.equal(directoryAdd.status, 200);
+  const staged = (await git(repo, "diff", "--cached", "--name-only")).trim().split("\n").sort();
+  assert.deepEqual(staged, ["notes/a.txt", "notes/nested/b.txt", "scratch.txt"]);
+
+  const trackedUndo = await fetch(`${url}/api/repo/repo/work/added?file=tracked.txt`, { method: "DELETE" });
+  assert.equal(trackedUndo.status, 400);
+  assert.match((await trackedUndo.json()).error, /not a newly added file/);
+  const mixedUndo = await fetch(`${url}/api/repo/repo/work/added?file=mixed`, { method: "DELETE" });
+  assert.equal(mixedUndo.status, 400);
+  assert.match((await mixedUndo.json()).error, /not newly added/);
+
+  const directoryUndo = await fetch(`${url}/api/repo/repo/work/added?file=notes`, { method: "DELETE" });
+  assert.equal(directoryUndo.status, 200);
+  assert.deepEqual((await git(repo, "diff", "--cached", "--name-only")).trim().split("\n"), ["scratch.txt"]);
+  const fileUndo = await fetch(`${url}/api/repo/repo/work/added?file=scratch.txt`, { method: "DELETE" });
+  assert.equal(fileUndo.status, 200);
+  assert.equal((await git(repo, "diff", "--cached", "--name-only")).trim(), "");
+  assert.equal(await readFile(path.join(repo, "scratch.txt"), "utf8"), "scratch\n");
+  assert.equal(await readFile(path.join(repo, "notes", "nested", "b.txt"), "utf8"), "b\n");
+  const undone = await (await fetch(`${url}/api/repo/repo/work`)).json();
+  const undonePaths = undone.files.filter((file) => file.path === "scratch.txt" || file.path.startsWith("notes/"));
+  assert.equal(undonePaths.length, 3);
+  assert.ok(undonePaths.every((file) => file.untracked));
+
+  await fetch(`${url}/api/repo/repo/work/untracked?file=scratch.txt`, { method: "POST" });
+  await fetch(`${url}/api/repo/repo/work/untracked?file=notes`, { method: "POST" });
+  const restaged = (await git(repo, "diff", "--cached", "--name-only")).trim().split("\n").sort();
+  assert.deepEqual(restaged, ["notes/a.txt", "notes/nested/b.txt", "scratch.txt"]);
+
+  const before = (await git(repo, "rev-parse", "HEAD")).trim();
+  const emptyMessage = await fetch(`${url}/api/repo/repo/work/commit`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: "   " }),
+  });
+  assert.equal(emptyMessage.status, 400);
+  assert.equal((await git(repo, "rev-parse", "HEAD")).trim(), before);
+
+  const committed = await fetch(`${url}/api/repo/repo/work/commit`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: "Work update\n\nCommit body" }),
+  });
+  assert.equal(committed.status, 200);
+  assert.deepEqual(await committed.json(), { ok: true });
+  assert.match(await git(repo, "log", "-1", "--format=%B"), /Work update\n\nCommit body/);
+  const committedFiles = (await git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD")).trim().split("\n").sort();
+  assert.deepEqual(committedFiles, ["mixed/tracked.txt", "notes/a.txt", "notes/nested/b.txt", "scratch.txt", "tracked.txt"]);
+  assert.equal(await readFile(path.join(repo, "left-alone.txt"), "utf8"), "untracked\n");
+  const remaining = await (await fetch(`${url}/api/repo/repo/work`)).json();
+  assert.deepEqual(remaining.files.map((file) => file.path), ["left-alone.txt", "mixed/new.txt"]);
+  assert.ok(remaining.files.every((file) => file.untracked));
+
+  const nothingTracked = await fetch(`${url}/api/repo/repo/work/commit`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: "No-op" }),
+  });
+  assert.equal(nothingTracked.status, 400);
+  assert.match((await nothingTracked.json()).error, /no tracked changes/);
+});

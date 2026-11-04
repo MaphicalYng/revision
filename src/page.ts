@@ -68,6 +68,10 @@ export function renderPage(): string {
   <main class="main" id="main"></main>
 </div>
 <footer class="version" aria-label="Build information">Built <time datetime="${BUILD_INFO.buildDate}">${BUILD_INFO.buildDate.slice(0, 10)}</time><span aria-hidden="true">·</span><code title="${BUILD_INFO.commitId}">${BUILD_INFO.commitId.slice(0, 12)}</code></footer>
+<div class="context-menu" id="workContextMenu" role="menu" hidden>
+  <button type="button" id="addToGit" role="menuitem">Add to Git</button>
+  <button type="button" id="undoAdd" role="menuitem" hidden>Undo Add</button>
+</div>
 <div class="modal-backdrop" id="deleteDialog" hidden>
   <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogMessage">
     <h2 id="deleteDialogTitle">Delete untracked file?</h2>
@@ -77,6 +81,20 @@ export function renderPage(): string {
       <button type="button" class="modal-btn" id="cancelDelete">Cancel</button>
       <button type="button" class="modal-btn danger" id="confirmDelete">Delete file</button>
     </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="commitDialog" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="commitDialogTitle" aria-describedby="commitDialogMessage">
+    <h2 id="commitDialogTitle">Commit tracked changes</h2>
+    <p id="commitDialogMessage">Commit all tracked modifications and staged changes. Untracked files that have not been added are left alone.</p>
+    <form id="commitForm">
+      <label class="commit-label" for="commitMessage">Commit message</label>
+      <textarea class="commit-message" id="commitMessage" maxlength="10000" required autocomplete="off" spellcheck="false"></textarea>
+      <div class="modal-actions">
+        <button type="button" class="modal-btn" id="cancelCommit">Cancel</button>
+        <button type="submit" class="modal-btn primary" id="confirmCommit" disabled>Commit</button>
+      </div>
+    </form>
   </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
@@ -330,6 +348,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 
 .detail { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 18px; }
 .d-head { margin-bottom: 16px; }
+.d-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.d-title-row .modal-btn { flex: none; }
 .d-subject { font-size: 20px; font-weight: 650; line-height: 1.3; word-break: break-word; }
 .d-head { flex: none; overflow-y: auto; }
 .d-head.sized .d-body { max-height: none; }
@@ -465,7 +485,22 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 .diff-empty code { font: 12px var(--mono); background: var(--panel-3); padding: 2px 8px; border-radius: 5px; }
 .binary-note { padding: 30px 20px; text-align: center; color: var(--text-3); }
 
-/* ---------- confirmation dialog ---------- */
+/* ---------- working-tree context menu ---------- */
+.context-menu {
+  position: fixed; z-index: 90; min-width: 144px; padding: 5px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+}
+.context-menu[hidden] { display: none; }
+.context-menu button {
+  display: block; width: 100%; padding: 7px 10px; text-align: left;
+  border: 0; border-radius: 5px; background: transparent; color: var(--text);
+  font: 12.5px var(--sans); cursor: pointer;
+}
+.context-menu button:hover, .context-menu button:focus-visible { background: var(--panel-3); outline: none; }
+.context-menu button[hidden] { display: none; }
+
+/* ---------- confirmation and commit dialogs ---------- */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 100;
   display: grid; place-items: center; padding: 20px;
@@ -497,6 +532,16 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 .modal-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .modal-btn.danger { background: var(--del-num); color: var(--bg); border-color: transparent; }
 .modal-btn.danger:hover { filter: brightness(0.92); }
+.modal-btn.primary { background: var(--accent); color: var(--bg); border-color: transparent; }
+.modal-btn.primary:hover { filter: brightness(0.94); }
+.modal-btn:disabled { opacity: 0.5; cursor: default; }
+.commit-label { display: block; margin-top: 16px; margin-bottom: 6px; font: 600 12px var(--sans); }
+.commit-message {
+  display: block; width: 100%; min-height: 108px; resize: vertical; padding: 9px 10px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px;
+  font: 13px/1.5 var(--sans);
+}
+.commit-message:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------- toast ---------- */
 .toast {
@@ -882,21 +927,26 @@ function startConnectionMonitor() {
   setConnectionState("checking");
   checkConnection();
 }
-async function api(path, method) {
+async function api(path, method, body) {
   var headers = { "Accept": "application/json" };
   if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  var options = { headers: headers, method: method || "GET" };
+  if (body !== undefined) {
+  headers["Content-Type"] = "application/json";
+  options.body = JSON.stringify(body);
+  }
   var r;
-  try { r = await fetch(path, { headers: headers, method: method || "GET" }); }
+  try { r = await fetch(path, options); }
   catch (e) { setConnectionState("offline"); throw e; }
   setConnectionState("online");
-  var body = null;
-  try { body = await r.json(); } catch (e) { /* non-json */ }
+  var responseBody = null;
+  try { responseBody = await r.json(); } catch (e) { /* non-json */ }
   if (r.status === 401) {
     mainEmpty("🔒", "Unauthorized", 'This revision server requires a token. Reopen it via the URL printed in the terminal (it contains <code class="k">?token=...</code>), or start it with <code class="k">--token &lt;secret&gt;</code>.');
     throw new Error("unauthorized");
   }
-  if (!r.ok) throw new Error((body && body.error) || ("HTTP " + r.status));
-  return body;
+  if (!r.ok) throw new Error((responseBody && responseBody.error) || ("HTTP " + r.status));
+  return responseBody;
 }
 function relTime(iso) {
   var t = new Date(iso).getTime(); if (isNaN(t)) return "";
@@ -1111,7 +1161,7 @@ async function selectWork() {
     else if (f.code.indexOf("D") !== -1) st = "deleted";
     else if (f.code.indexOf("R") !== -1 || f.code.indexOf("C") !== -1) st = "renamed";
     else if (f.code.indexOf("A") !== -1) st = "added";
-    return { path: f.path, oldPath: f.oldPath || undefined, status: st, binary: f.binary, additions: f.additions, deletions: f.deletions };
+    return { path: f.path, oldPath: f.oldPath || undefined, status: st, untracked: f.untracked, stagedAdded: f.code.charAt(0) === "A", binary: f.binary, additions: f.additions, deletions: f.deletions };
   });
   if (!files.length) {
     mainEmpty("&#10003;", "No uncommitted changes", "The working tree is clean.");
@@ -1124,6 +1174,135 @@ async function selectWork() {
   state.fileSel = files[0].path;
   renderWorkDetail();
   renderCommits();
+}
+
+var workContextTarget = null;
+function hideWorkContextMenu() {
+ workContextTarget = null;
+ $("workContextMenu").hidden = true;
+}
+function showWorkContextMenu(path, isDir, event) {
+ if (state.view !== "work") return;
+ var files = isDir ? state.files.filter(function (f) { return f.path.indexOf(path + "/") === 0; }) :
+ state.files.filter(function (f) { return f.path === path; });
+ var allUntracked = files.length > 0 && files.every(function (f) { return f.untracked; });
+ var allAdded = files.length > 0 && files.every(function (f) { return f.stagedAdded; });
+ if (!allUntracked && !allAdded) { hideWorkContextMenu(); return; }
+ event.preventDefault();
+ event.stopPropagation();
+ workContextTarget = { repo: state.repo, path: path };
+ $("addToGit").hidden = !allUntracked;
+ $("undoAdd").hidden = !allAdded;
+ var menu = $("workContextMenu");
+ menu.hidden = false;
+ menu.style.left = Math.max(8, Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8)) + "px";
+ menu.style.top = Math.max(8, Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8)) + "px";
+ $(allUntracked ? "addToGit" : "undoAdd").focus();
+}
+async function addWorkPath() {
+ var target = workContextTarget;
+ if (!target) return;
+ hideWorkContextMenu();
+ try {
+ await api("/api/repo/" + encodeURIComponent(target.repo) + "/work/untracked?file=" + encodeURIComponent(target.path), "POST");
+ toast("Added " + target.path + " to Git");
+ if (state.repo !== target.repo) return;
+ await loadWork();
+ if (state.view === "work") await selectWork();
+ } catch (e) {
+ toast(e.message);
+ }
+}
+async function undoAddWorkPath() {
+ var target = workContextTarget;
+ if (!target) return;
+ hideWorkContextMenu();
+ try {
+ await api("/api/repo/" + encodeURIComponent(target.repo) + "/work/added?file=" + encodeURIComponent(target.path), "DELETE");
+ toast("Undid Add for " + target.path + "; files remain on disk");
+ if (state.repo !== target.repo) return;
+ await loadWork();
+ if (state.view === "work") await selectWork();
+ } catch (e) {
+ toast(e.message);
+ }
+}
+function bindWorkContextMenu() {
+ $("addToGit").onclick = addWorkPath;
+ $("undoAdd").onclick = undoAddWorkPath;
+ document.addEventListener("click", function (e) {
+ if (!$("workContextMenu").contains(e.target)) hideWorkContextMenu();
+ });
+ document.addEventListener("contextmenu", function (e) {
+ if (!e.target.closest(".t-row")) hideWorkContextMenu();
+ });
+ document.addEventListener("keydown", function (e) {
+ if (e.key === "Escape" && !$("workContextMenu").hidden) {
+ hideWorkContextMenu();
+ e.preventDefault();
+ }
+ });
+ document.addEventListener("scroll", hideWorkContextMenu, true);
+ window.addEventListener("resize", hideWorkContextMenu);
+}
+
+var commitDialogState = { previousFocus: null, busy: false };
+function setCommitBusy(busy) {
+ commitDialogState.busy = busy;
+ $("commitMessage").readOnly = busy;
+ $("cancelCommit").disabled = busy;
+ $("confirmCommit").disabled = busy || !$("commitMessage").value.trim();
+}
+function openCommitDialog() {
+ if (state.view !== "work" || !state.work || !state.work.files.some(function (f) { return !f.untracked; })) return;
+ if (!$("commitDialog").hidden) return;
+ commitDialogState.previousFocus = document.activeElement;
+ $("commitMessage").value = "";
+ setCommitBusy(false);
+ $("commitDialog").hidden = false;
+ $("commitMessage").focus();
+}
+function closeCommitDialog() {
+ if (commitDialogState.busy || $("commitDialog").hidden) return;
+ var previousFocus = commitDialogState.previousFocus;
+ commitDialogState.previousFocus = null;
+ $("commitDialog").hidden = true;
+ if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+}
+async function commitWork() {
+ if (commitDialogState.busy) return;
+ var message = $("commitMessage").value.trim();
+ if (!message || state.view !== "work") return;
+ var repo = state.repo;
+ setCommitBusy(true);
+ try {
+ await api("/api/repo/" + encodeURIComponent(repo) + "/work/commit", "POST", { message: message });
+ setCommitBusy(false);
+ closeCommitDialog();
+ toast("Committed tracked changes");
+ if (state.repo !== repo) return;
+ await loadWork();
+ if (state.view === "work") await selectWork();
+ } catch (e) {
+ setCommitBusy(false);
+ toast(e.message);
+ $("commitMessage").focus();
+ }
+}
+function bindCommitDialog() {
+ var dialog = $("commitDialog");
+ $("commitMessage").oninput = function () { setCommitBusy(commitDialogState.busy); };
+ $("commitForm").onsubmit = function (e) { e.preventDefault(); commitWork(); };
+ $("cancelCommit").onclick = closeCommitDialog;
+ dialog.onclick = function (e) { if (e.target === dialog) closeCommitDialog(); };
+ dialog.addEventListener("keydown", function (e) {
+ if (e.key === "Escape") { closeCommitDialog(); e.preventDefault(); e.stopPropagation(); }
+ if (e.key !== "Tab") return;
+ var items = Array.prototype.slice.call(dialog.querySelectorAll("textarea, button")).filter(function (el) { return !el.disabled; });
+ var first = items[0], last = items[items.length - 1];
+ if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+ else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+ });
 }
 
 var deleteDialogState = { resolve: null, previousFocus: null };
@@ -1191,10 +1370,12 @@ function renderWorkDetail() {
   });
   var chips = '<span class="chip"><b>' + state.work.files.length + "</b> files</span>";
   if (hasNums) chips += '<span class="chip add">+<b>' + adds + '</b></span><span class="chip del">&#8722;<b>' + dels + "</b></span>";
+  var canCommit = state.work.files.some(function (f) { return !f.untracked; });
   $("main").innerHTML =
     '<div class="detail">' +
     '<div class="d-head">' +
-    '<h1 class="d-subject">Uncommitted changes</h1>' +
+    '<div class="d-title-row"><h1 class="d-subject">Uncommitted changes</h1>' +
+    (canCommit ? '<button type="button" class="modal-btn primary" id="commitTracked">Commit tracked…</button>' : "") + "</div>" +
     '<div class="d-meta">' +
     '<span class="avatar" title="working tree">WT</span>' +
     "<span><b>working tree</b> &middot; vs HEAD &middot; " + esc(state.repo) + (state.branch ? " (" + esc(state.branch) + ")" : "") + "</span>" +
@@ -1208,6 +1389,7 @@ function renderWorkDetail() {
     '<div class="diffbox" id="diffbox"></div>' +
     "</div>" +
     "</div>";
+  if (canCommit) $("commitTracked").onclick = openCommitDialog;
   installFileTreeResizer();
   renderTree();
   renderDiff();
@@ -1254,6 +1436,7 @@ function fileCounts(f) {
 }
 
 function renderTree() {
+  hideWorkContextMenu();
   var el = $("ftreeBody");
   if (!el) return;
   if (!state.files.length) { el.innerHTML = '<div class="diff-empty">No files changed.</div>'; return; }
@@ -1271,6 +1454,7 @@ function renderTree() {
     }).join("") : '<div class="diff-empty">No files match.</div>';
     Array.prototype.forEach.call(el.querySelectorAll(".t-file"), function (b) {
       b.onclick = function () { state.fileSel = b.getAttribute("data-path"); renderTree(); renderDiff(); };
+      b.oncontextmenu = function (e) { showWorkContextMenu(b.getAttribute("data-path"), false, e); };
     });
     return;
   }
@@ -1353,12 +1537,14 @@ function renderTree() {
       state.treeOpen[path] = !cur;
       renderTree();
     };
+    b.oncontextmenu = function (e) { showWorkContextMenu(b.getAttribute("data-dir"), true, e); };
   });
   Array.prototype.forEach.call(el.querySelectorAll(".t-file"), function (b) {
     b.onclick = function () {
       state.fileSel = b.getAttribute("data-path");
       renderTree(); renderDiff();
     };
+    b.oncontextmenu = function (e) { showWorkContextMenu(b.getAttribute("data-path"), false, e); };
   });
 }
 
@@ -2072,6 +2258,8 @@ function bindChrome() {
   applyTheme(document.documentElement.getAttribute("data-theme") || "light");
   initPaneWidths();
   bindDeleteDialog();
+  bindCommitDialog();
+  bindWorkContextMenu();
   var side = document.querySelector(".side");
   side.insertAdjacentElement("afterend",
     createPaneResizer("side", "sideResizer", "Resize commit list"));
@@ -2096,7 +2284,7 @@ function bindChrome() {
     else selectCommit(btn.getAttribute("data-sha"));
   };
   document.addEventListener("keydown", function (e) {
-    if (deleteDialogState.resolve) return;
+    if (deleteDialogState.resolve || !$("commitDialog").hidden) return;
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var curSha = state.pendingSha || (state.commit && state.commit.sha);

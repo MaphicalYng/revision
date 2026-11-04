@@ -95,6 +95,8 @@ The page carries `?token=` in its URL and forwards it as an `Authorization: Bear
 
 `dir` itself shows up when it is a git repository (so `revision ~/code/app` works), and so does every immediate subdirectory of `dir` that contains a `.git` entry. Click a commit on the left, select files in the tree beside the diff, and read the diff.
 
+In **Working tree**, right-click an untracked file or a fully untracked directory and choose **Add to Git** to stage it. Right-click a newly added file or a directory containing only newly added files and choose **Undo Add** to unstage it while keeping the files on disk. **Commit tracked…** commits all tracked modifications and staged changes with your message; untracked files that have not been added stay out of the commit.
+
 The desktop app is an additional way to run the same UI. The CLI/Web workflow remains available: port 4777 is still the default, and `revision` still opens your browser unless `--no-open` is passed.
 
 ### Keyboard

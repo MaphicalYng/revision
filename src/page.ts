@@ -660,17 +660,16 @@ function selectedBranch() {
 function updatePullButton() {
   var btn = $("pullBtn");
   var branch = selectedBranch();
-  var canPull = !!branch && !branch.remote && branch.current;
+  var canPull = !!branch && !branch.remote;
   btn.disabled = !canPull || state.pulling;
   btn.title = state.pulling ? "Pulling " + state.branch + "…" :
     !branch ? "No branch selected" :
     branch.remote ? "Select a local branch to pull" :
-    !branch.current ? "Only the checked-out branch can be pulled" :
     "Pull " + branch.name;
 }
 function pullSelectedBranch() {
   var branch = selectedBranch();
-  if (!branch || branch.remote || !branch.current || state.pulling) return;
+  if (!branch || branch.remote || state.pulling) return;
   toast("Pulling " + branch.name + "…");
   state.pulling = true;
   updatePullButton();

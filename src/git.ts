@@ -174,8 +174,30 @@ export async function branches(repo: string): Promise<BranchInfo[]> {
 export async function pullBranch(repo: string, branch: string): Promise<void> {
   const selected = (await branches(repo)).find((b) => b.name === branch && !b.remote);
   if (!selected) throw new GitError(`not a local branch: ${branch}`, -1);
-  if (!selected.current) throw new GitError(`branch is not checked out: ${branch}`, -1);
-  await git(repo, ["pull"]);
+  if (selected.current) {
+    await git(repo, ["pull"]);
+    return;
+  }
+
+  let remote: string;
+  let upstream: string;
+  try {
+    [remote, upstream] = await Promise.all([
+      git(repo, ["config", "--get", `branch.${branch}.remote`]),
+      git(repo, ["config", "--get", `branch.${branch}.merge`]),
+    ]);
+  } catch {
+    throw new GitError(`no upstream configured for branch: ${branch}`, -1);
+  }
+  remote = remote.trim();
+  upstream = upstream.trim();
+  if (!remote || !upstream.startsWith("refs/heads/")) {
+    throw new GitError(`no upstream configured for branch: ${branch}`, -1);
+  }
+
+  // A checked-out branch can merge or rebase through its worktree. For any
+  // other branch, update the ref directly and let fetch reject non-ff updates.
+  await git(repo, ["fetch", "--", remote, `${upstream}:refs/heads/${branch}`]);
 }
 
 export async function removeUntrackedFile(repo: string, file: string): Promise<void> {

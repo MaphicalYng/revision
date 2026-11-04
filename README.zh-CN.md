@@ -162,7 +162,7 @@ npm run dist:desktop  # 构建本地安装包，不发布
 ## 功能
 
 - **仓库发现**——目标目录本身为仓库时会被包含，同时扫描下一层目录；支持 worktree 和 submodule（`.git` 文件或目录），名称冲突时添加后缀，最多 100 个仓库；每次刷新浏览器时重新扫描
-- **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中；可从标头 Pull 当前选中的已检出本地分支，并显示开始和完成提示
+- **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中；可从标头 Pull 任意选中的本地分支，并显示开始和完成提示。已检出分支使用 `git pull`；其他分支从配置的上游 fast-forward 更新，无需切换分支
 - **可搜索下拉框**——仓库和分支选择器使用自定义下拉框（非原生 `<select>`），支持输入筛选、键盘导航（↑↓ Enter Esc）、分组分支列表（Local / Remote），以及标记当前选中项
 - **文件树搜索**——文件树顶部的筛选框可实时缩小到匹配路径（显示扁平化完整路径）
 - **Commit 列表**——可折叠侧栏（记住偏好），每页 100 条并提供“Load more”；服务端全历史搜索（匹配标题、作者名称或邮箱和 SHA——短 SHA 或完整 40 字符 SHA，支持任意长度前缀）、合并 Commit 标记、相对时间戳
@@ -215,7 +215,7 @@ tests/
 ```
 page --GET /api/repos----------------> server --fs scan------------> 仓库列表
 page --GET /api/repo/:id/branches----> server --git branch---------> 本地 + 远程分支
-page --POST /api/repo/:id/pull?branch-> server --git pull----------> 更新已检出的本地分支
+page --POST /api/repo/:id/pull?branch-> server --git pull/fetch-----> 更新本地分支（未检出分支仅支持 fast-forward）
 page --GET /api/health---------------> server（需要认证的存活检查）
 page --GET /api/repo/:id/log?branch--> server --git log------------> Commit 行
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> 文件列表 + 统计

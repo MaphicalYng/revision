@@ -106,10 +106,12 @@ test("fully untracked directories carry the untracked badge", () => {
   assert.ok(mainScript.includes(`(dn.untracked ? '<span class="st U" title="Untracked directory">U</span>' : "")`));
 });
 
-test("pull is limited to the checked-out local branch and untracked deletion requires confirmation", () => {
+test("pull supports every local branch and untracked deletion requires confirmation", () => {
   assert.match(staticBody, /id="pullBtn"[^>]*aria-label="pull selected branch"[^>]*disabled/);
+  assert.match(mainScript, /var canPull = !!branch && !branch\.remote;/);
+  assert.match(mainScript, /if \(!branch \|\| branch\.remote \|\| state\.pulling\) return;/);
   assert.match(mainScript, /branch\.remote \? "Select a local branch to pull"/);
-  assert.match(mainScript, /!branch\.current \? "Only the checked-out branch can be pulled"/);
+  assert.doesNotMatch(mainScript, /Only the checked-out branch can be pulled/);
   assert.match(mainScript, /toast\("Pulling " \+ branch\.name \+ "…"\)/);
   assert.match(mainScript, /\/pull\?branch=" \+ encodeURIComponent\(branch\.name\), "POST"/);
   assert.match(mainScript, /toast\("Pulled " \+ branch\.name\)/);

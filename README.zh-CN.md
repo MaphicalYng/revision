@@ -169,7 +169,7 @@ npm run dist:desktop  # 构建本地安装包，不发布
 - **文件树搜索**——文件树顶部的筛选框可实时缩小到匹配路径（显示扁平化完整路径）
 - **Commit 列表**——可折叠侧栏（记住偏好），每页 100 条并提供“Load more”；服务端全历史搜索（匹配标题、作者名称或邮箱和 SHA——短 SHA 或完整 40 字符 SHA，支持任意长度前缀）、合并 Commit 标记、相对时间戳
 - **文件树**——变更文件以可展开目录树显示在 Diff 旁（不是标签栏），提供每个文件和目录的 `+x −y` 统计及 `A`/`M`/`D`/`R`/`U` 状态标记；自动展开指向所选文件的路径，其余路径默认折叠
-- **Working tree**——Commit 列表顶部的“Working tree”条目显示未提交变更（合并暂存和未暂存内容，与 HEAD 比较）；支持重命名感知的文件状态、来自 numstat 的每文件 `+x −y` 统计、将未跟踪文件渲染为全新行 Diff、文件和完全未跟踪目录上的 `U` 标记，以及无提交分支支持；可通过 Diff 标头删除未跟踪文件，删除前显示应用内确认弹窗
+- **Working tree**——Commit 列表顶部的“Working tree”条目显示未提交变更（合并暂存和未暂存内容，与 HEAD 比较）；支持重命名感知的文件状态、来自 numstat 的每文件 `+x −y` 统计、将未跟踪文件渲染为全新行 Diff、文件和完全未跟踪目录上的 `U` 标记，以及无提交分支支持；可通过 Diff 标头删除未跟踪文件，删除前显示应用内确认弹窗；Add to Git 可暂存未跟踪文件或目录，Undo Add 可取消暂存新增路径而不删除文件，Commit tracked… 可提交已追踪和已暂存变更，同时保留其他未跟踪文件
 - **Commit 详情**——完整消息正文、作者、精确日期、可复制的 SHA 和文件路径，以及 `files changed / +ins / −del` 汇总统计
 - **并排 Diff**——旧文件在左、新文件在右，各自带行号；删除和新增行段逐行配对，使两列保持对齐，未配对的多余行在对侧显示空单元格
 - **语法高亮**——根据文件扩展名高亮 Diff 行（32 种扩展名映射语言，来自内置的 37 语言 [highlight.js](https://highlightjs.org) common bundle——无 CDN、无额外依赖，仍是一个自包含 HTML 页面）；GitHub 明暗 token 配色跟随主题切换；词级变更标记叠加在高亮行上，使跨变更的字符串和注释保留颜色；超过 5000 个 Diff 行的文件会跳过高亮以保持速度
@@ -222,6 +222,9 @@ page --GET /api/health---------------> server（需要认证的存活检查）
 page --GET /api/repo/:id/log?branch--> server --git log------------> Commit 行
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> 文件列表 + 统计
 page --GET /api/repo/:id/work--------> server --git status/diff-----> working-tree 文件 + 统计
+page --POST .../work/untracked?file--> server --git add-------------> 暂存未跟踪文件或目录
+page --DELETE .../work/added?file----> server --git rm --cached-----> 取消暂存新增文件或目录
+page --POST .../work/commit---------> server --git commit -a-------> 提交已追踪和已暂存变更
 page --DELETE .../work/untracked?file-> server --git clean----------> 删除已确认的未跟踪文件
 page --GET .../diff?file=-----------> server --git diff + parse---> { hunks: [{ rows }] }
 page --GET .../work/diff?file=------> server --git diff + parse---> working-tree hunks

@@ -121,6 +121,8 @@ test("working tree supports adding untracked paths and committing tracked change
   assert.match(staticBody, /id="commitDialog" hidden/);
   assert.match(staticBody, /<textarea class="commit-message" id="commitMessage"[^>]*required/);
   assert.match(mainScript, /\/work\/commit", "POST", \{ message: message \}/);
+  var commitWorkSource = mainScript.split("async function commitWork() {")[1].split("\n  }")[0];
+  assert.match(commitWorkSource, /await loadWork\(\);\s*await loadCommits\(0, null\);/);
   assert.match(mainScript, /commitDialogState\.busy/);
   assert.match(staticBody, /Untracked files that have not been added are left alone\./);
 });

@@ -1282,6 +1282,7 @@ async function commitWork() {
  toast("Committed tracked changes");
  if (state.repo !== repo) return;
  await loadWork();
+ await loadCommits(0, null);
  if (state.view === "work") await selectWork();
  } catch (e) {
  setCommitBusy(false);

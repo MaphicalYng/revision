@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
+import { readFileSync } from "node:fs";
 import { renderPage } from "../dist/page.js";
+import { BUILD_INFO } from "../dist/build-info.js";
 
 const html = renderPage();
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => match[1]);
@@ -15,6 +17,18 @@ test("all inline JavaScript parses", () => {
   scripts.forEach((source, index) => {
     assert.doesNotThrow(() => new vm.Script(source, { filename: `page-inline-${index}.js` }));
   });
+});
+
+test("footer shows the tool version ahead of the source Commit ID", () => {
+  const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(BUILD_INFO.version, version, "embedded build version must match package.json");
+  assert.match(BUILD_INFO.commitId, /^[0-9a-f]{40}$/);
+  assert.ok(
+    staticBody.includes(
+      `<span class="version-tag" title="Revision version">v${version}</span><code title="${BUILD_INFO.commitId}">${BUILD_INFO.commitId.slice(0, 12)}</code>`,
+    ),
+    "footer must render v<version> immediately before the 12-char Commit ID",
+  );
 });
 
 test("desktop API, command whitelist, and resizer contracts are present", () => {

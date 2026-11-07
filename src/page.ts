@@ -68,7 +68,7 @@ export function renderPage(): string {
   </div>
   <main class="main" id="main"></main>
 </div>
-<footer class="version" aria-label="Build information">Built <time datetime="${BUILD_INFO.buildDate}">${BUILD_INFO.buildDate.slice(0, 10)}</time><span aria-hidden="true">·</span><code title="${BUILD_INFO.commitId}">${BUILD_INFO.commitId.slice(0, 12)}</code></footer>
+<footer class="version" aria-label="Build information">Built <time datetime="${BUILD_INFO.buildDate}">${BUILD_INFO.buildDate.slice(0, 10)}</time><span aria-hidden="true">·</span><span class="version-tag" title="Revision version">v${BUILD_INFO.version}</span><code title="${BUILD_INFO.commitId}">${BUILD_INFO.commitId.slice(0, 12)}</code></footer>
 <div class="context-menu" id="workContextMenu" role="menu" hidden>
   <button type="button" id="addToGit" role="menuitem">Add to Git</button>
   <button type="button" id="undoAdd" role="menuitem" hidden>Undo Add</button>
@@ -290,6 +290,7 @@ html.desktop .empty .desktop-open-folder { margin-top: 12px; }
   color: var(--text-3); font-size: 11px;
 }
 .version code { color: var(--text-2); font: 11px var(--mono); }
+.version .version-tag { color: var(--text-2); font: 11px var(--mono); }
 .side {
   width: 320px; flex: none;
   display: flex; flex-direction: column;

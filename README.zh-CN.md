@@ -181,7 +181,7 @@ npm run dist:desktop  # 构建本地安装包，不发布
 - **根 Commit**——通过 `git diff-tree --root` / `git show` 处理
 - **Hash 路由**——导航时同步 `#r=<repo>&b=<branch>&c=<sha>`，因此仓库、分支和 Commit 导航可分享、可收藏
 - **安全**——默认启用令牌认证（每次启动生成随机令牌，打印可直接使用的 URL；通过 `--token` 固定令牌，`--no-auth` 可关闭）；常量时间比较；仓库 ID 来自发现扫描，绝不使用原始路径；revision 必须是十六进制；文件路径必须是仓库相对路径；所有 Git 调用均使用参数数组（不使用 shell）；`GIT_OPTIONAL_LOCKS=0` 防止读取操作触碰索引锁；默认绑定 localhost
-- **服务状态与构建版本**——标头通过需要认证的 10 秒健康检查和浏览器网络事件显示已连接 / 已断开状态；页脚显示工具构建日期和源码 Commit ID，这些信息在构建时嵌入，因此 npm 安装不需要工具的 `.git` 目录
+- **服务状态与构建版本**——标头通过需要认证的 10 秒健康检查和浏览器网络事件显示已连接 / 已断开状态；页脚显示工具构建日期、版本号（`v0.5.0`）和源码 Commit ID，这些信息在构建时嵌入，因此 npm 安装不需要工具的 `.git` 目录
 
 ## 架构
 
@@ -207,7 +207,7 @@ bin/
   revision.js  npm bin 包装器 -> dist/cli.js
 scripts/
   demo.mjs     在 /tmp/revision-demo 下生成示例仓库
-  build-version.mjs  将构建日期和工具 Commit ID 嵌入 src/build-info.ts
+  build-version.mjs  将版本号、构建日期和工具 Commit ID 嵌入 src/build-info.ts
 tests/
   *.test.mjs  桌面菜单 / 设置 / 页面契约和服务器端口行为
 ```
@@ -240,7 +240,7 @@ page 将行渲染为 4 列网格：[旧行号][旧代码][新行号][新代码]
 
 ```bash
 npm install
-npm run build          # 嵌入构建日期 + Commit ID，然后 tsc -> dist/
+npm run build          # 嵌入版本号 + 构建日期 + Commit ID，然后 tsc -> dist/
 npm run demo           # 在 /tmp/revision-demo 中创建示例仓库
 node bin/revision.js /tmp/revision-demo
 ```

@@ -164,10 +164,10 @@ Packages are written to `release/`. Unsigned local packages can be used for veri
 ## Features
 
 - **Repo discovery** — the target directory itself when it is a repo, plus one level deep, worktrees and submodules included (a `.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
-- **Branches** — local branches with the current one preselected; remote branches under an optgroup; pull any selected local branch from the header, with start and completion toasts. The checked-out branch uses `git pull`; other branches fast-forward from their configured upstream without switching branches
-- **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking
+- **Branches** — local branches with the current one preselected; remote branches under an optgroup; checkout the selected local or remote branch from the header (remote branches create a same-named local branch, with tracking when the remote is configured), blocked whenever staged, unstaged, or untracked changes exist; pull any selected local branch, with start and completion toasts. The checked-out branch uses `git pull`; other branches fast-forward from their configured upstream without switching branches
+- **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking; branch search matches both local and remote branch names
 - **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type
-- **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", server-side full-history search (matches subject, author name or email, and SHA — short or full 40-char, any prefix length), merge-commit markers, relative timestamps
+- **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", server-side search across every local and remote branch (matches subject, author name or email, and SHA — short or full 40-char, any prefix length); results from another branch show its name in both the list and commit details, merge-commit markers, relative timestamps
 - **File tree** — changed files rendered as an expandable directory tree beside the diff (not a tab strip), with per-file and per-directory `+x −y` counts and `A`/`M`/`D`/`R`/`U` status badges; the chain to the selected file auto-expands, everything else starts collapsed
 - **Working tree** — a “Working tree” entry atop the commit list shows uncommitted changes (staged + unstaged combined, diffed against HEAD); rename-aware file statuses, per-file `+x −y` from numstat, untracked files rendered as all-new-line diffs with `U` badges on files and fully untracked directories, unborn-branch support; untracked files can be permanently deleted from the diff header after an in-app confirmation; Add to Git stages untracked files or directories, Undo Add unstages newly added paths without deleting them, and Commit tracked… commits tracked and staged changes while leaving other untracked files untouched
 - **Commit detail** — full message body, author, exact date, copyable SHA and file paths, aggregate `files changed / +ins / −del` stats
@@ -217,6 +217,7 @@ Data flow:
 ```
 page --GET /api/repos----------------> server --fs scan------------> repo list
 page --GET /api/repo/:id/branches----> server --git branch---------> local + remote branches
+page --POST /api/repo/:id/checkout?branch-> server --git checkout------> switch branch / create local tracking branch (clean tree only)
 page --POST /api/repo/:id/pull?branch-> server --git pull/fetch-----> local branch update (non-checked-out branches fast-forward only)
 page --GET /api/health----------------> server (authenticated liveness check)
 page --GET /api/repo/:id/log?branch--> server --git log------------> commit rows

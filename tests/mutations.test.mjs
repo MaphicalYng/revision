@@ -102,6 +102,84 @@ test("pull updates checked-out and non-checked-out local branches", async (t) =>
   assert.match((await remoteBranch.json()).error, /not a local branch/);
 });
 
+test("checkout switches clean local and remote branches but blocks every working tree change", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "revision-checkout-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repo = path.join(root, "repo");
+  await mkdir(repo);
+  await git(repo, "init", "--quiet", "--initial-branch=main");
+  await writeFile(path.join(repo, "tracked.txt"), "initial\n");
+  await git(repo, "add", "tracked.txt");
+  await commit(repo, "Initial");
+
+  await git(repo, "checkout", "--quiet", "-b", "feature/local");
+  await writeFile(path.join(repo, "local.txt"), "local\n");
+  await git(repo, "add", "local.txt");
+  await commit(repo, "Local branch");
+  await git(repo, "checkout", "--quiet", "main");
+
+  await git(repo, "checkout", "--quiet", "-b", "feature/remote");
+  await writeFile(path.join(repo, "remote.txt"), "remote\n");
+  await git(repo, "add", "remote.txt");
+  await commit(repo, "Remote branch");
+  await git(repo, "remote", "add", "origin", path.join(root, "remote.git"));
+  await git(repo, "update-ref", "refs/remotes/origin/feature/remote", "HEAD");
+  await git(repo, "checkout", "--quiet", "main");
+  await git(repo, "branch", "-D", "feature/remote");
+  const url = await serve(t, root);
+
+  const local = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("feature/local")}`, { method: "POST" });
+  assert.equal(local.status, 200);
+  assert.deepEqual(await local.json(), { ok: true, branch: "feature/local", created: false });
+  assert.equal((await git(repo, "branch", "--show-current")).trim(), "feature/local");
+  assert.equal(await readFile(path.join(repo, "local.txt"), "utf8"), "local\n");
+
+  const main = await fetch(`${url}/api/repo/repo/checkout?branch=main`, { method: "POST" });
+  assert.equal(main.status, 200);
+  await writeFile(path.join(repo, "tracked.txt"), "modified\n");
+  const modified = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("feature/local")}`, { method: "POST" });
+  assert.equal(modified.status, 409);
+  assert.match((await modified.json()).error, /tracked and untracked changes/);
+  assert.equal((await git(repo, "branch", "--show-current")).trim(), "main");
+  assert.equal(await readFile(path.join(repo, "tracked.txt"), "utf8"), "modified\n");
+  await git(repo, "checkout", "--quiet", "--", "tracked.txt");
+
+  await writeFile(path.join(repo, "tracked.txt"), "staged\n");
+  await git(repo, "add", "tracked.txt");
+  const staged = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("feature/local")}`, { method: "POST" });
+  assert.equal(staged.status, 409);
+  await git(repo, "reset", "--hard", "--quiet", "HEAD");
+
+  await writeFile(path.join(repo, "scratch.txt"), "untracked\n");
+  const untracked = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("feature/local")}`, { method: "POST" });
+  assert.equal(untracked.status, 409);
+  assert.equal((await git(repo, "branch", "--show-current")).trim(), "main");
+  await rm(path.join(repo, "scratch.txt"));
+
+  const remote = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("origin/feature/remote")}`, { method: "POST" });
+  assert.equal(remote.status, 200);
+  assert.deepEqual(await remote.json(), { ok: true, branch: "feature/remote", created: true });
+  assert.equal((await git(repo, "branch", "--show-current")).trim(), "feature/remote");
+  assert.equal(await readFile(path.join(repo, "remote.txt"), "utf8"), "remote\n");
+  assert.equal((await git(repo, "config", "--get", "branch.feature/remote.merge")).trim(), "refs/heads/feature/remote");
+
+  await fetch(`${url}/api/repo/repo/checkout?branch=main`, { method: "POST" });
+  const existingLocal = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("origin/feature/remote")}`, { method: "POST" });
+  assert.equal(existingLocal.status, 200);
+  assert.deepEqual(await existingLocal.json(), { ok: true, branch: "feature/remote", created: false });
+  assert.equal((await git(repo, "branch", "--show-current")).trim(), "feature/remote");
+
+  const backToMain = await fetch(`${url}/api/repo/repo/checkout?branch=main`, { method: "POST" });
+  assert.equal(backToMain.status, 200);
+  await git(repo, "update-ref", "refs/remotes/origin/feature/unconfigured", "main");
+  await git(repo, "config", "--remove-section", "remote.origin");
+  const unconfigured = await fetch(`${url}/api/repo/repo/checkout?branch=${encodeURIComponent("origin/feature/unconfigured")}`, { method: "POST" });
+  assert.equal(unconfigured.status, 200);
+  assert.deepEqual(await unconfigured.json(), { ok: true, branch: "feature/unconfigured", created: true });
+  assert.equal((await git(repo, "branch", "--show-current")).trim(), "feature/unconfigured");
+  await assert.rejects(git(repo, "config", "--get", "branch.feature/unconfigured.merge"));
+});
+
 test("delete removes only an existing untracked file", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "revision-delete-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));

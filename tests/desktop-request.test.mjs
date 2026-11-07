@@ -11,6 +11,7 @@ const session = {
 };
 
 for (const [method, path] of [
+  ["POST", "/api/repo/demo/checkout?branch=main"],
   ["POST", "/api/repo/demo/pull?branch=main"],
   ["DELETE", "/api/repo/demo/work/untracked?file=scratch.txt"],
 ]) {

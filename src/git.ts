@@ -19,6 +19,13 @@ export class GitError extends Error {
   }
 }
 
+export class DirtyWorktreeError extends Error {
+  constructor() {
+    super("Checkout blocked: commit, stash, or remove all tracked and untracked changes first");
+    this.name = "DirtyWorktreeError";
+  }
+}
+
 function git(
   repo: string,
   args: string[],
@@ -171,6 +178,49 @@ export async function branches(repo: string): Promise<BranchInfo[]> {
   return [...locals, ...remotes];
 }
 
+export async function checkoutBranch(
+  repo: string,
+  branch: string,
+): Promise<{ branch: string; created: boolean }> {
+  const all = await branches(repo);
+  const selected = all.find((b) => b.name === branch);
+  if (!selected) throw new GitError(`not a branch: ${branch}`, -1);
+
+  let localName = selected.name;
+  let existingLocal = selected.remote ? undefined : selected;
+  if (selected.remote) {
+    const slash = selected.name.indexOf("/");
+    localName = slash > 0 ? selected.name.slice(slash + 1) : selected.name;
+    existingLocal = all.find((b) => !b.remote && b.name === localName);
+  }
+  if (existingLocal?.current) return { branch: localName, created: false };
+
+  const status = await git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  if (status.length > 0) throw new DirtyWorktreeError();
+
+  if (selected.remote && !existingLocal) {
+    const slash = selected.name.indexOf("/");
+    const remoteName = slash > 0 ? selected.name.slice(0, slash) : "";
+    let hasRemoteConfig = false;
+    if (remoteName) {
+      try {
+        await git(repo, ["config", "--get", `remote.${remoteName}.url`]);
+        hasRemoteConfig = true;
+      } catch {
+        // A remote-tracking ref can outlive its remote configuration. The
+        // commit is still locally available, so create an untracked branch.
+      }
+    }
+    await git(repo, [
+      "checkout", "--quiet", hasRemoteConfig ? "--track" : "--no-track",
+      "-b", localName, selected.name,
+    ]);
+    return { branch: localName, created: true };
+  }
+  await git(repo, ["checkout", "--quiet", localName]);
+  return { branch: localName, created: false };
+}
+
 export async function pullBranch(repo: string, branch: string): Promise<void> {
   const selected = (await branches(repo)).find((b) => b.name === branch && !b.remote);
   if (!selected) throw new GitError(`not a local branch: ${branch}`, -1);
@@ -214,14 +264,20 @@ export interface CommitSummary {
   date: string;
   subject: string;
   parents: number;
+  sourceBranch?: string;
 }
 
 const LOG_FMT = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%P%x1f%s";
+const SEARCH_LOG_FMT = LOG_FMT + "%x1f%S";
 const LOG_PAGE = 100;
 
-function parseCommit(line: string): CommitSummary {
-  const [sha, shortSha, author, email, date, parents, subject] = line.split("\x1f");
-  return { sha, shortSha, author, email, date, subject, parents: parents ? parents.split(" ").length : 0 };
+function parseCommit(line: string, currentBranch?: string): CommitSummary {
+  const [sha, shortSha, author, email, date, parents, subject, sourceBranch] = line.split("\x1f");
+  return {
+    sha, shortSha, author, email, date, subject,
+    parents: parents ? parents.split(" ").length : 0,
+    sourceBranch: sourceBranch && sourceBranch !== currentBranch ? sourceBranch : undefined,
+  };
 }
 
 function commitMatches(commit: CommitSummary, query: string): boolean {
@@ -232,7 +288,7 @@ function commitMatches(commit: CommitSummary, query: string): boolean {
 
 function searchLog(repo: string, branch: string, skip: number, query: string): Promise<{ commits: CommitSummary[]; hasMore: boolean }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["-C", repo, "log", branch, LOG_FMT], {
+    const child = spawn("git", ["-C", repo, "log", "--branches", "--remotes", SEARCH_LOG_FMT, "--source"], {
       env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -258,7 +314,7 @@ function searchLog(repo: string, branch: string, skip: number, query: string): P
 
     function consume(line: string): void {
       if (!line) return;
-      const commit = parseCommit(line);
+      const commit = parseCommit(line, branch);
       if (!commitMatches(commit, query)) return;
       if (matched++ < skip) return;
       if (commits.length < LOG_PAGE) {
@@ -305,7 +361,7 @@ export async function log(repo: string, branch: string, skip: number, query = ""
   const out = await git(repo, ["log", branch, LOG_FMT, "-n", String(LOG_PAGE + 1), "--skip", String(skip)]);
   const lines = out.split("\n").filter(Boolean);
   const hasMore = lines.length > LOG_PAGE;
-  const commits = lines.slice(0, LOG_PAGE).map(parseCommit);
+  const commits = lines.slice(0, LOG_PAGE).map((line) => parseCommit(line));
   return { commits, hasMore };
 }
 

@@ -164,10 +164,10 @@ npm run dist:desktop  # 构建本地安装包，不发布
 ## 功能
 
 - **仓库发现**——目标目录本身为仓库时会被包含，同时扫描下一层目录；支持 worktree 和 submodule（`.git` 文件或目录），名称冲突时添加后缀，最多 100 个仓库；每次刷新浏览器时重新扫描
-- **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中；可从标头 Pull 任意选中的本地分支，并显示开始和完成提示。已检出分支使用 `git pull`；其他分支从配置的上游 fast-forward 更新，无需切换分支
-- **可搜索下拉框**——仓库和分支选择器使用自定义下拉框（非原生 `<select>`），支持输入筛选、键盘导航（↑↓ Enter Esc）、分组分支列表（Local / Remote），以及标记当前选中项
+- **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中；可从标头 Checkout 选中的本地或远程分支（远程分支按需创建同名本地分支，并在 remote 已配置时建立 tracking），只要存在已暂存、未暂存或未跟踪变更就会阻止操作；可 Pull 任意选中的本地分支，并显示开始和完成提示。已检出分支使用 `git pull`；其他分支从配置的上游 fast-forward 更新，无需切换分支
+- **可搜索下拉框**——仓库和分支选择器使用自定义下拉框（非原生 `<select>`），支持输入筛选、键盘导航（↑↓ Enter Esc）、分组分支列表（Local / Remote），以及标记当前选中项；分支搜索会同时匹配本地和远程分支名称
 - **文件树搜索**——文件树顶部的筛选框可实时缩小到匹配路径（显示扁平化完整路径）
-- **Commit 列表**——可折叠侧栏（记住偏好），每页 100 条并提供“Load more”；服务端全历史搜索（匹配标题、作者名称或邮箱和 SHA——短 SHA 或完整 40 字符 SHA，支持任意长度前缀）、合并 Commit 标记、相对时间戳
+- **Commit 列表**——可折叠侧栏（记住偏好），每页 100 条并提供“Load more”；服务端跨全部本地和远程分支搜索（匹配标题、作者名称或邮箱和 SHA——短 SHA 或完整 40 字符 SHA，支持任意长度前缀）；来自其他分支的结果会在列表和 Commit 详情中标记分支名，并提供合并 Commit 标记、相对时间戳
 - **文件树**——变更文件以可展开目录树显示在 Diff 旁（不是标签栏），提供每个文件和目录的 `+x −y` 统计及 `A`/`M`/`D`/`R`/`U` 状态标记；自动展开指向所选文件的路径，其余路径默认折叠
 - **Working tree**——Commit 列表顶部的“Working tree”条目显示未提交变更（合并暂存和未暂存内容，与 HEAD 比较）；支持重命名感知的文件状态、来自 numstat 的每文件 `+x −y` 统计、将未跟踪文件渲染为全新行 Diff、文件和完全未跟踪目录上的 `U` 标记，以及无提交分支支持；可通过 Diff 标头删除未跟踪文件，删除前显示应用内确认弹窗；Add to Git 可暂存未跟踪文件或目录，Undo Add 可取消暂存新增路径而不删除文件，Commit tracked… 可提交已追踪和已暂存变更，同时保留其他未跟踪文件
 - **Commit 详情**——完整消息正文、作者、精确日期、可复制的 SHA 和文件路径，以及 `files changed / +ins / −del` 汇总统计
@@ -217,6 +217,7 @@ tests/
 ```
 page --GET /api/repos----------------> server --fs scan------------> 仓库列表
 page --GET /api/repo/:id/branches----> server --git branch---------> 本地 + 远程分支
+page --POST /api/repo/:id/checkout?branch-> server --git checkout------> 切换分支 / 创建本地 tracking 分支（仅限干净工作区）
 page --POST /api/repo/:id/pull?branch-> server --git pull/fetch-----> 更新本地分支（未检出分支仅支持 fast-forward）
 page --GET /api/health---------------> server（需要认证的存活检查）
 page --GET /api/repo/:id/log?branch--> server --git log------------> Commit 行

@@ -90,13 +90,28 @@ test("wide layout supports the commit resizer on Web and desktop", () => {
 });
 
 test("commit search requests server-side pages and ignores stale responses", () => {
-  assert.match(staticBody, /Search all commits: author, email, subject, SHA/);
+  assert.match(staticBody, /Search all branches: author, email, subject, SHA/);
   assert.match(mainScript, /"&q=" \+ encodeURIComponent\(query\)/);
   assert.ok(mainScript.includes("filterTimer = setTimeout(function () { loadCommits(0, null); }, 500);"));
   assert.match(mainScript, /var seq = \+\+logSeq;/);
   assert.match(mainScript, /if \(seq !== logSeq\) return;/);
   assert.match(mainScript, /if \(seq === logSeq\) \{\s*state\.loading = false;/);
   assert.doesNotMatch(mainScript, /function commitMatches\(/);
+  assert.match(html, /\.c-branch \{/);
+  assert.match(mainScript, /c\.sourceBranch/);
+  assert.match(mainScript, /class="c-branch" title="Branch: /);
+  assert.match(mainScript, /if \(sourceBranch\) state\.commit\.sourceBranch = sourceBranch;/);
+  assert.match(html, /\.d-source \.c-branch \{/);
+  assert.match(mainScript, /d\.sourceBranch \? '<div class="d-source">Branch /);
+});
+
+test("branch search includes both local and remote branches", () => {
+  assert.match(staticBody, /id="branchDdSearch"[^>]*placeholder="Search local & remote branches"/);
+  var openRepoSource = mainScript.split("async function openRepo(")[1].split("\nasync function loadCommits(")[0];
+  assert.match(openRepoSource, /locals\.forEach\(function \(x\) \{ bitems\.push\(\{ value: x\.name, label: x\.name, group: "Local" \}\); \}\)/);
+  assert.match(openRepoSource, /remotes\.forEach\(function \(x\) \{ bitems\.push\(\{ value: x\.name, label: x\.name, group: "Remote" \}\); \}\)/);
+  assert.match(openRepoSource, /branchDd\.setItems\(bitems\)/);
+  assert.match(mainScript, /function applyFilter\(\) \{[\s\S]*?items\.filter\(function \(it\) \{[\s\S]*?it\.label\.toLowerCase\(\)\.indexOf\(q\) >= 0/);
 });
 
 test("fully untracked directories carry the untracked badge", () => {
@@ -125,6 +140,14 @@ test("working tree supports adding untracked paths and committing tracked change
   assert.match(commitWorkSource, /await loadWork\(\);\s*await loadCommits\(0, null\);/);
   assert.match(mainScript, /commitDialogState\.busy/);
   assert.match(staticBody, /Untracked files that have not been added are left alone\./);
+});
+
+test("checkout action switches the selected local or remote branch and refreshes the repository", () => {
+  assert.match(staticBody, /id="checkoutBtn"[^>]*aria-label="checkout selected branch"[^>]*disabled/);
+  assert.match(mainScript, /function checkoutSelectedBranch\(\)/);
+  assert.match(mainScript, /\/checkout\?branch=" \+ encodeURIComponent\(branch\.name\), "POST"/);
+  assert.match(mainScript, /target\.current \|\| state\.checkingOut \|\| state\.pulling/);
+  assert.match(mainScript, /openRepo\(repo, result\.branch, null\)/);
 });
 
 test("pull supports every local branch and untracked deletion requires confirmation", () => {

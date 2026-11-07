@@ -82,3 +82,56 @@ test("server-side search covers full history and paginates matching commits", as
   const invalid = await fetch(`${url}/api/repo/${repoId}/log?branch=HEAD&skip=0&q=${"x".repeat(301)}`);
   assert.equal(invalid.status, 400);
 });
+
+test("commit search covers local and remote branches without changing the selected branch", async (t) => {
+  const repo = await mkdtemp(path.join(tmpdir(), "revision-all-branch-search-"));
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  await git(repo, "init", "--quiet", "-b", "main");
+  await git(
+    repo,
+    "-c", "user.name=Alice Example",
+    "-c", "user.email=alice@example.org",
+    "commit", "--quiet", "--allow-empty", "-m", "Shared root",
+  );
+
+  await git(repo, "checkout", "--quiet", "-b", "feature/local-only");
+  await git(
+    repo,
+    "-c", "user.name=Local Author",
+    "-c", "user.email=local@example.org",
+    "commit", "--quiet", "--allow-empty", "-m", "Unique local branch commit",
+  );
+  const localSha = (await exec("git", ["-C", repo, "rev-parse", "HEAD"])).stdout.trim();
+  await git(repo, "checkout", "--quiet", "main");
+
+  await git(repo, "checkout", "--quiet", "-b", "feature/remote-only");
+  await git(
+    repo,
+    "-c", "user.name=Remote Author",
+    "-c", "user.email=remote@example.org",
+    "commit", "--quiet", "--allow-empty", "-m", "Unique remote branch commit",
+  );
+  const remoteSha = (await exec("git", ["-C", repo, "rev-parse", "HEAD"])).stdout.trim();
+  await git(repo, "update-ref", "refs/remotes/origin/feature/remote-only", remoteSha);
+  await git(repo, "checkout", "--quiet", "main");
+  await git(repo, "branch", "-D", "feature/remote-only");
+
+  const ordinary = await log(repo, "main", 0);
+  assert.deepEqual(ordinary.commits.map((commit) => commit.subject), ["Shared root"]);
+  assert.equal(ordinary.commits[0].sourceBranch, undefined, "ordinary logs do not need source labels");
+
+  const local = await log(repo, "main", 0, localSha);
+  assert.deepEqual(local.commits.map((commit) => commit.sha), [localSha]);
+  assert.equal(local.commits[0].sourceBranch, "feature/local-only");
+  assert.deepEqual((await log(repo, "main", 0, "unique local branch")).commits.map((commit) => commit.sha), [localSha]);
+
+  const remote = await log(repo, "main", 0, remoteSha);
+  assert.deepEqual(remote.commits.map((commit) => commit.sha), [remoteSha]);
+  assert.equal(remote.commits[0].sourceBranch, "origin/feature/remote-only");
+  assert.deepEqual((await log(repo, "main", 0, "remote@example.org")).commits.map((commit) => commit.sha), [remoteSha]);
+  assert.equal((await log(repo, "origin/feature/remote-only", 0, remoteSha)).commits[0].sourceBranch, undefined);
+
+  const shared = await log(repo, "main", 0, "shared root");
+  assert.equal(shared.commits.length, 1, "reachable commits are deduplicated across refs");
+  assert.equal(shared.commits[0].sourceBranch, undefined, "commits sourced from the selected branch are not labeled");
+});

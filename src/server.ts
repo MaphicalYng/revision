@@ -14,8 +14,10 @@ import { timingSafeEqual } from "node:crypto";
 import { parseGitDiff, toSideBySide, countChanges, type SideBySideRow, type Hunk } from "./diff.js";
 import {
   GitError,
+  DirtyWorktreeError,
   listRepos,
   branches,
+  checkoutBranch,
   pullBranch,
   log,
   commitDetail,
@@ -119,8 +121,10 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
     }
   }
 
-  function fail(res: http.ServerResponse, err: unknown): void {
-    if (err instanceof GitError) {
+function fail(res: http.ServerResponse, err: unknown): void {
+    if (err instanceof DirtyWorktreeError) {
+        json(res, 409, { error: err.message });
+    } else if (err instanceof GitError) {
       json(res, 502, { error: `git: ${err.message}` });
     } else if (err instanceof HttpError) {
       json(res, err.status, { error: err.message });
@@ -197,6 +201,17 @@ export async function startServer(opts: ServerOptions): Promise<{ server: http.S
         const rp = await repoPath(res, decodeURIComponent(g[1]));
         if (!rp) return;
         json(res, 200, { branches: await branches(rp) });
+        return;
+      }
+
+      g = m(/^\/api\/repo\/([^/]+)\/checkout$/);
+      if (req.method === "POST" && g) {
+        const rp = await repoPath(res, decodeURIComponent(g[1]));
+        if (!rp) return;
+        const branch = url.searchParams.get("branch") ?? "";
+        if (!branch || branch.length > 300) throw new HttpError("invalid branch", 400);
+        const result = await checkoutBranch(rp, branch);
+        json(res, 200, { ok: true, ...result });
         return;
       }
 

@@ -42,10 +42,11 @@ export function renderPage(): string {
   <div class="dd" id="branchDd">
     <button class="dd-btn" id="branchDdBtn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-text">Branch</span><svg class="dd-caret" viewBox="0 0 10 6" width="10" height="6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button>
     <div class="dd-menu" id="branchDdMenu" hidden>
-      <input class="dd-search" id="branchDdSearch" type="search" placeholder="Filter branches" autocomplete="off" spellcheck="false">
+      <input class="dd-search" id="branchDdSearch" type="search" placeholder="Search local & remote branches" autocomplete="off" spellcheck="false">
       <div class="dd-list" id="branchDdList" role="listbox"></div>
     </div>
   </div>
+  <button id="checkoutBtn" class="ibtn" title="Checkout selected branch" aria-label="checkout selected branch" disabled><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h10M8 4l4 4-4 4M3 2v2M3 12v2"/></svg></button>
   <button id="pullBtn" class="ibtn" title="Pull selected branch" aria-label="pull selected branch" disabled><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13.5h10"/></svg></button>
   <div class="sp"></div>
   <div class="connection" id="connectionStatus" data-state="checking" role="status" aria-live="polite" aria-atomic="true" title="Connecting to server"><span class="connection-dot" aria-hidden="true"></span><span id="connectionText">Connecting</span></div>
@@ -56,7 +57,7 @@ export function renderPage(): string {
   <aside class="side">
     <div class="side-head">
       <div class="side-head-row"><span id="sideTitle">Commits</span><button class="ibtn sm" id="collapseSide" title="Hide commit list" aria-label="hide commit list"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5"/></svg></button></div>
-      <input id="filter" type="search" placeholder="Search all commits: author, email, subject, SHA" autocomplete="off" spellcheck="false">
+      <input id="filter" type="search" placeholder="Search all branches: author, email, subject, SHA" autocomplete="off" spellcheck="false">
     </div>
     <div id="commitList" class="commits"></div>
     <button id="moreBtn" class="more" hidden>Load more</button>
@@ -326,6 +327,7 @@ html.side-collapsed .side { display: none; }
 .c-subject { font-weight: 550; font-size: 13px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .c-meta { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 12px; color: var(--text-2); min-width: 0; }
 .c-sha { font: 600 11px var(--mono); color: var(--accent); background: var(--accent-dim); border-radius: 4px; padding: 1px 5px; flex: none; }
+.c-branch { display: block; width: fit-content; max-width: 100%; margin-top: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 10px var(--mono); color: var(--text-2); background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
 .c-author, .c-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .c-time { margin-left: auto; flex: none; }
 .c-parents { font-size: 11px; color: var(--text-3); }
@@ -355,6 +357,8 @@ code.k { font: 12px var(--mono); background: var(--panel-3); border: 1px solid v
 .d-head.sized .d-body { max-height: none; }
 .d-body { margin-top: 10px; max-height: 26vh; overflow-y: auto; color: var(--text-2); font-size: 13px; white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--border); padding-left: 12px; }
 .d-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
+.d-source { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--text-2); font-size: 11px; }
+.d-source .c-branch { display: inline-block; margin-top: 0; }
 .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--panel-3); color: var(--accent); display: grid; place-items: center; font: 700 10px var(--sans); flex: none; }
 .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font: 500 12px var(--sans); color: var(--text-2); }
 .chip b { font-weight: 650; color: var(--text); }
@@ -706,11 +710,53 @@ function updatePullButton() {
   var btn = $("pullBtn");
   var branch = selectedBranch();
   var canPull = !!branch && !branch.remote;
-  btn.disabled = !canPull || state.pulling;
+  btn.disabled = !canPull || state.pulling || state.checkingOut;
   btn.title = state.pulling ? "Pulling " + state.branch + "…" :
     !branch ? "No branch selected" :
     branch.remote ? "Select a local branch to pull" :
     "Pull " + branch.name;
+  updateCheckoutButton();
+}
+function checkoutTarget(branch) {
+  if (!branch || !branch.remote) return branch;
+  var slash = branch.name.indexOf("/");
+  var localName = slash > 0 ? branch.name.slice(slash + 1) : branch.name;
+  return state.branches.find(function (b) { return !b.remote && b.name === localName; }) ||
+    { name: localName, current: false, remote: false };
+}
+function updateCheckoutButton() {
+  var btn = $("checkoutBtn");
+  var branch = selectedBranch();
+  var target = checkoutTarget(branch);
+  btn.disabled = !branch || !target || target.current || state.checkingOut || state.pulling;
+  btn.title = state.checkingOut ? "Checking out " + state.branch + "…" :
+    !branch ? "No branch selected" :
+    target.current ? "Already on " + target.name :
+    branch.remote && !state.branches.some(function (b) { return !b.remote && b.name === target.name; }) ?
+      "Checkout and track " + branch.name : "Checkout " + target.name;
+}
+function checkoutSelectedBranch() {
+  var branch = selectedBranch();
+  var target = checkoutTarget(branch);
+  if (!branch || !target || target.current || state.checkingOut || state.pulling) return;
+  var repo = state.repo;
+  toast("Checking out " + branch.name + "…");
+  state.checkingOut = true;
+  updatePullButton();
+  var operation = async function () {
+    try {
+      var result = await api("/api/repo/" + encodeURIComponent(repo) + "/checkout?branch=" + encodeURIComponent(branch.name), "POST");
+      toast("Checked out " + result.branch + (result.created ? " (from " + branch.name + ")" : ""));
+      if (state.repo === repo) await openRepo(repo, result.branch, null);
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      state.checkingOut = false;
+      updatePullButton();
+    }
+  }();
+  spinWhile($("checkoutBtn"), operation);
+  return operation;
 }
 function pullSelectedBranch() {
   var branch = selectedBranch();
@@ -875,7 +921,7 @@ var branchDd = createDropdown("branchDd", {
 });
 
 var state = {
-  repos: [], repo: null, branches: [], branch: null, pulling: false,
+  repos: [], repo: null, branches: [], branch: null, pulling: false, checkingOut: false,
   commits: [], hasMore: false, loading: false,
   commit: null, pendingSha: null, files: [], fileSel: null, fileCache: {}, filter: "",
   work: null, view: "commit", treeOpen: {}, fileQuery: "",
@@ -1096,8 +1142,9 @@ function renderCommits() {
   $("commitList").innerHTML = workRow + items.map(function (c) {
     var on = state.commit && state.commit.sha === c.sha ? " on" : "";
     var mp = c.parents > 1 ? ' <span class="c-parents" title="merge commit">·merge</span>' : "";
+    var sb = c.sourceBranch ? ' <span class="c-branch" title="Branch: ' + esc(c.sourceBranch) + '">' + esc(c.sourceBranch) + "</span>" : "";
     return '<button class="commit' + on + '" data-sha="' + esc(c.sha) + '">' +
-      '<div class="c-subject">' + esc(c.subject) + "</div>" +
+      '<div class="c-subject">' + esc(c.subject) + "</div>" + sb +
       '<div class="c-meta"><span class="c-sha">' + esc(c.shortSha) + "</span>" +
       '<span class="c-author">' + esc(c.author) + "</span>" + mp +
       '<span class="c-time">' + esc(relTime(c.date)) + "</span></div></button>";
@@ -1110,6 +1157,8 @@ async function selectCommit(sha) {
   if (!sha) return;
   var seq = ++commitSeq;
   state.pendingSha = sha;
+  var selected = state.commits.filter(function (c) { return c.sha === sha; })[0];
+  var sourceBranch = selected && selected.sourceBranch;
   var detail;
   try {
     detail = await api("/api/repo/" + encodeURIComponent(state.repo) + "/commit/" + encodeURIComponent(sha));
@@ -1123,6 +1172,7 @@ async function selectCommit(sha) {
   if (seq !== commitSeq) return;            /* a newer selection already won */
   state.view = "commit";
   state.commit = detail;
+  if (sourceBranch) state.commit.sourceBranch = sourceBranch;
   state.files = detail.files;
   state.fileSel = detail.files.length ? detail.files[0].path : null;
   state.fileCache = {}; state.fileContent = {}; state.ctxExp = {}; state.diffMeta = {}; state.treeOpen = {}; state.fileQuery = "";
@@ -1404,6 +1454,7 @@ function renderDetail() {
   if (d.additions != null) chips += '<span class="chip add">+<b>' + d.additions + "</b></span>";
   if (d.deletions != null) chips += '<span class="chip del">−<b>' + d.deletions + "</b></span>";
   var mergeNote = d.isMerge ? '<div class="merge-note">Merge commit — diff is shown against the first parent.</div>' : "";
+  var source = d.sourceBranch ? '<div class="d-source">Branch <span class="c-branch" title="Branch: ' + esc(d.sourceBranch) + '">' + esc(d.sourceBranch) + "</span></div>" : "";
   $("main").innerHTML =
     '<div class="detail">' +
     '<div class="d-head">' +
@@ -1413,7 +1464,7 @@ function renderDetail() {
     '<span class="avatar" title="' + esc(d.author) + '">' + esc(initials(d.author)) + "</span>" +
     "<span><b>" + esc(d.author) + "</b> · " + esc(fullTime(d.date)) + "</span>" +
     '<span class="chip sha-chip" id="shaChip" title="click to copy">' + esc(d.shortSha) + "</span>" +
-    chips + "</div>" + mergeNote + "</div>" +
+    chips + "</div>" + source + mergeNote + "</div>" +
     '<div class="d-split">' +
     '<div class="ftree" id="ftree">' +
     '<input id="fileFilter" class="ftree-search" type="search" placeholder="Filter files" autocomplete="off" spellcheck="false">' +
@@ -2265,6 +2316,7 @@ function bindChrome() {
   side.insertAdjacentElement("afterend",
     createPaneResizer("side", "sideResizer", "Resize commit list"));
   $("themeBtn").onclick = toggleTheme;
+  $("checkoutBtn").onclick = checkoutSelectedBranch;
   $("pullBtn").onclick = pullSelectedBranch;
   $("collapseSide").onclick = toggleSide;
   $("expandSide").onclick = toggleSide;

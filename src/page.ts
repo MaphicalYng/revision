@@ -551,6 +551,11 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: 38px; transform: translateX(-50%) translateY(8px);
+  /* Above every app layer: sticky diff cells (z-index 1), pane resizers (2),
+     dropdowns (40), context menu (90) and the modal scrim (100). Without this
+     the toast is painted under the sticky line-number column and gets cut in
+     half wherever the two overlap. */
+  z-index: 120;
   background: var(--panel-3); color: var(--text);
   border: 1px solid var(--border); border-radius: 9px;
   padding: 9px 16px; font-size: 13px;

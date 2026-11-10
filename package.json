@@ -34,7 +34,7 @@
     "build": "node scripts/build-version.mjs && tsc -p tsconfig.json",
     "demo": "node scripts/demo.mjs",
     "dev:desktop": "npm run build && electron .",
-    "dist:desktop": "npm run build && electron-builder --publish never",
+    "dist:desktop": "npm run build && electron-builder --publish never && node scripts/pack-dmg-lzma.mjs",
     "test": "node --test \"tests/*.test.mjs\"",
     "prepublishOnly": "npm run build"
   },

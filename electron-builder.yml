@@ -21,6 +21,17 @@ files:
   - "!demo/**"
   - "!tests/**"
 
+# Chromium 自带的界面语言只留英文和简体中文（应用界面是自绘 HTML，不依赖这些 .pak/.lproj）。
+# 收益：macOS 8.3 MB / Windows 48.8 MB / Linux 7.7 MB，见 plans/desktop-size.md §A2。
+electronLanguages:
+  - en
+  - zh_CN
+
+# 打包后裁掉用不到的运行时文件。
+afterPack: ./scripts/after-pack.mjs
+# DMG 的 LZMA 压缩不在钩子里做：latest-*.yml 由 PublishManager 在钩子之后才写出，
+# 转换与元数据回写都在 scripts/pack-dmg-lzma.mjs（由 npm run dist:desktop 调用）。
+
 mac:
   icon: build/icon.png
   target:

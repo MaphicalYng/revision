@@ -565,6 +565,13 @@ mark.w-add { background: var(--add-word); color: inherit; border-radius: 3px; pa
   max-width: 80vw;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-action {
+  margin-left: 10px; padding: 2px 9px; font: inherit; font-size: 12px;
+  color: var(--text); background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; vertical-align: baseline;
+}
+.toast-action:hover { background: var(--panel-2); }
+.toast-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
@@ -764,19 +771,37 @@ function checkoutSelectedBranch() {
   spinWhile($("checkoutBtn"), operation);
   return operation;
 }
+/* A pull that cannot even reach the remote looks like an auth problem to git,
+   so check macOS's Local Network permission before repeating its advice. */
+var UNREACHABLE = /could not read from remote|undefined error|no route to host|host is unreachable|network is unreachable|connection (refused|timed out)|operation timed out/i;
+async function explainUnreachableRemote(error, repo) {
+  if (!error || error.status !== 502) return false;
+  if (!UNREACHABLE.test(String(error.message || ""))) return false;
+  var report;
+  try { report = await api("/api/localnet?repo=" + encodeURIComponent(repo)); }
+  catch (ignored) { return false; }
+  if (!report || report.status !== "blocked" || !report.canOpenSettings) return false;
+  toast("macOS blocks revision from reaching " + (report.target || "the local network") +
+    " — allow it under Privacy & Security → Local Network.", {
+    label: "Open Settings",
+    run: function () { api("/api/localnet/open-settings", "POST").catch(function () { /* best effort */ }); }
+  });
+  return true;
+}
 function pullSelectedBranch() {
   var branch = selectedBranch();
   if (!branch || branch.remote || state.pulling) return;
   toast("Pulling " + branch.name + "…");
   state.pulling = true;
   updatePullButton();
+  var repo = state.repo;
   var operation = async function () {
     try {
-      await api("/api/repo/" + encodeURIComponent(state.repo) + "/pull?branch=" + encodeURIComponent(branch.name), "POST");
+      await api("/api/repo/" + encodeURIComponent(repo) + "/pull?branch=" + encodeURIComponent(branch.name), "POST");
       toast("Pulled " + branch.name);
       await refreshCurrent();
     } catch (e) {
-      toast(e.message);
+      if (!(await explainUnreachableRemote(e, repo))) toast(e.message);
     } finally {
       state.pulling = false;
       updatePullButton();
@@ -939,9 +964,24 @@ function esc(s) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
   });
 }
-function toast(msg) {
-  var t = $("toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove("show"); }, 2600);
+function toast(msg, action) {
+  var t = $("toast");
+  t.textContent = msg;
+  if (action) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = action.label;
+    button.addEventListener("click", function () {
+      t.classList.remove("show");
+      action.run();
+    });
+    t.appendChild(button);
+  }
+  t.classList.add("show");
+  clearTimeout(t._h);
+  // An actionable hint is useless if it disappears in 2.6s.
+  t._h = setTimeout(function () { t.classList.remove("show"); }, action ? 15000 : 2600);
 }
 var connectionState = "";
 var connectionTimer = null;
@@ -997,7 +1037,11 @@ async function api(path, method, body) {
     mainEmpty("🔒", "Unauthorized", 'This revision server requires a token. Reopen it via the URL printed in the terminal (it contains <code class="k">?token=...</code>), or start it with <code class="k">--token &lt;secret&gt;</code>.');
     throw new Error("unauthorized");
   }
-  if (!r.ok) throw new Error((responseBody && responseBody.error) || ("HTTP " + r.status));
+  if (!r.ok) {
+    var failure = new Error((responseBody && responseBody.error) || ("HTTP " + r.status));
+    failure.status = r.status;
+    throw failure;
+  }
   return responseBody;
 }
 function relTime(iso) {

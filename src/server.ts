@@ -7,6 +7,7 @@
  */
 
 import http from "node:http";
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { timingSafeEqual } from "node:crypto";
@@ -30,9 +31,18 @@ import {
   workDiffText,
   workFileText,
   blobAtRev,
+  remoteUrl,
   DIFF_CHAR_CAP,
 } from "./git.js";
 import { renderPage } from "./page.js";
+import { LOCAL_NETWORK_SETTINGS_URL, probeLocalNetwork, remoteHost, remotePort } from "./localnet.js";
+
+/** Hand the Local Network pane to macOS. Fixed URL, no user input involved. */
+function openLocalNetworkSettings(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile("open", [LOCAL_NETWORK_SETTINGS_URL], (error) => (error ? reject(error) : resolve()));
+  });
+}
 
 export interface ServerOptions {
   root: string;
@@ -40,6 +50,12 @@ export interface ServerOptions {
   port: number;
   /** Access token; null disables authentication (loopback-only setups). */
   token: string | null;
+  /**
+   * Allow endpoints that act on the host (currently: opening macOS Settings).
+   * The desktop shell sets this; the plain web server leaves it off so a
+   * browser page can never trigger local system UI.
+   */
+  desktopActions?: boolean;
 }
 
 interface RepoEntry {
@@ -193,6 +209,31 @@ function fail(res: http.ServerResponse, err: unknown): void {
       if (req.method === "GET" && p === "/api/repos") {
         const found = await listRepos(root); // fresh scan for accurate metadata
         json(res, 200, { repos: found });
+        return;
+      }
+
+      // macOS Local Network permission probe. The renderer asks after a pull
+      // failed, so it can turn "could not read from remote repository" into
+      // an actionable hint instead of blaming the credentials.
+      if (req.method === "GET" && p === "/api/localnet") {
+        const targets: Array<{ host: string; port: number }> = [];
+        const id = url.searchParams.get("repo");
+        if (id) {
+          const rp = await repoPath(res, id);
+          if (!rp) return;
+          const remote = await remoteUrl(rp);
+          const host = remote ? remoteHost(remote) : null;
+          if (remote && host) targets.push({ host, port: remotePort(remote) });
+        }
+        const probe = await probeLocalNetwork({ targets });
+        json(res, 200, { ...probe, canOpenSettings: Boolean(opts.desktopActions) });
+        return;
+      }
+
+      if (req.method === "POST" && p === "/api/localnet/open-settings") {
+        if (!opts.desktopActions) throw new HttpError("not available in web mode", 404);
+        await openLocalNetworkSettings();
+        json(res, 200, { ok: true });
         return;
       }
 

@@ -267,6 +267,7 @@ class DesktopController {
           host: "127.0.0.1",
           port: 0,
           token,
+          desktopActions: true,
         });
         candidate = {
           root: job.root,

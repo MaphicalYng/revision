@@ -19,6 +19,23 @@ export class GitError extends Error {
   }
 }
 
+/**
+ * Git prints the cause of a failure on one of these prefixed lines and then
+ * follows it with generic advice ("Please make sure you have the correct
+ * access rights and the repository exists."), so the diagnostic lines — not
+ * the trailing ones — are what a user needs to see.
+ */
+const DIAGNOSTIC_LINE = /^(?:fatal|error|warning|remote|ssh|hint):/i;
+
+/** Collapse git's stderr into one short line that keeps the root cause. */
+function describeFailure(stderr: string, fallback: string): string {
+  const lines = stderr.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return fallback;
+  const diagnostic = lines.filter((line) => DIAGNOSTIC_LINE.test(line));
+  const text = (diagnostic.length > 0 ? diagnostic : lines).slice(0, 3).join(" · ");
+  return text.length > 400 ? `${text.slice(0, 399)}…` : text;
+}
+
 export class DirtyWorktreeError extends Error {
   constructor() {
     super("Checkout blocked: commit, stash, or remove all tracked and untracked changes first");
@@ -29,7 +46,7 @@ export class DirtyWorktreeError extends Error {
 function git(
   repo: string,
   args: string[],
-  opts: { maxBuffer?: number; okCodes?: number[] } = {},
+  opts: { maxBuffer?: number; okCodes?: number[]; timeoutMs?: number } = {},
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -38,7 +55,7 @@ function git(
       {
         env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
         maxBuffer: opts.maxBuffer ?? 32 * 1024 * 1024,
-        timeout: 20_000,
+        timeout: opts.timeoutMs ?? 20_000,
       },
       (err, stdout, stderr) => {
         if (err) {
@@ -48,8 +65,7 @@ function git(
             resolve(stdout);
             return;
           }
-          const tail = (stderr || String(err)).trim().split("\n").slice(-3).join(" ");
-          reject(new GitError(tail || "git command failed", code));
+          reject(new GitError(describeFailure(stderr, err.message || String(err)), code));
           return;
         }
         resolve(stdout);
@@ -221,11 +237,38 @@ export async function checkoutBranch(
   return { branch: localName, created: false };
 }
 
+/**
+ * URL of the repository's primary remote, used to learn which host a push or
+ * pull will talk to. Returns null for repositories without any remote.
+ */
+export async function remoteUrl(repo: string): Promise<string | null> {
+  let names: string[];
+  try {
+    names = (await git(repo, ["remote"])).split("\n").map((line) => line.trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
+  const name = names.includes("origin") ? "origin" : names[0];
+  if (!name) return null;
+  try {
+    const url = (await git(repo, ["remote", "get-url", name])).trim();
+    return url || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Network operations talk to a remote host (often over SSH and a VPN), so they
+ * get a much longer budget than the local plumbing commands above.
+ */
+const REMOTE_TIMEOUT_MS = 180_000;
+
 export async function pullBranch(repo: string, branch: string): Promise<void> {
   const selected = (await branches(repo)).find((b) => b.name === branch && !b.remote);
   if (!selected) throw new GitError(`not a local branch: ${branch}`, -1);
   if (selected.current) {
-    await git(repo, ["pull"]);
+    await git(repo, ["pull"], { timeoutMs: REMOTE_TIMEOUT_MS });
     return;
   }
 
@@ -247,7 +290,7 @@ export async function pullBranch(repo: string, branch: string): Promise<void> {
 
   // A checked-out branch can merge or rebase through its worktree. For any
   // other branch, update the ref directly and let fetch reject non-ff updates.
-  await git(repo, ["fetch", "--", remote, `${upstream}:refs/heads/${branch}`]);
+  await git(repo, ["fetch", "--", remote, `${upstream}:refs/heads/${branch}`], { timeoutMs: REMOTE_TIMEOUT_MS });
 }
 
 export async function removeUntrackedFile(repo: string, file: string): Promise<void> {
@@ -338,7 +381,8 @@ function searchLog(repo: string, branch: string, skip: number, query: string): P
       }
     });
     child.stderr.on("data", (chunk: string) => {
-      stderr = (stderr + chunk).slice(-4096);
+      // Keep the head: git's diagnostic lines come before its generic advice.
+      if (stderr.length < 4096) stderr = (stderr + chunk).slice(0, 4096);
     });
     child.on("error", (err) => finish(new GitError(err.message, -1)));
     child.on("close", (code) => {
@@ -349,8 +393,7 @@ function searchLog(repo: string, branch: string, skip: number, query: string): P
         finish();
         return;
       }
-      const tail = stderr.trim().split("\n").slice(-3).join(" ");
-      finish(new GitError(tail || "git command failed", code ?? -1));
+      finish(new GitError(describeFailure(stderr, String(code)), code ?? -1));
     });
   });
 }

@@ -161,10 +161,13 @@ npm run dist:desktop  # build local packages without publishing
 
 Packages are written to `release/`. Unsigned local packages can be used for verification. Public distribution requires Apple code signing and notarization for macOS and code signing for Windows; signing credentials are not included in this repository. Windows and Linux packages have not been verified on this machine.
 
+On macOS the build limits bundled locales to `en` and `zh_CN`, removes the SwiftShader ICD and the crashpad handler from the app bundle, and repacks the finished DMG with LZMA (ULMO); `scripts/pack-dmg-lzma.mjs` then rewrites `latest-mac.yml` so its size and sha512 match the repacked file.
+
 ## Features
 
 - **Repo discovery** — the target directory itself when it is a repo, plus one level deep, worktrees and submodules included (a `.git` file or dir), name collisions suffixed, 100-repo cap; rescan on every browser refresh
 - **Branches** — local branches with the current one preselected; remote branches under an optgroup; checkout the selected local or remote branch from the header (remote branches create a same-named local branch, with tracking when the remote is configured), blocked whenever staged, unstaged, or untracked changes exist; pull any selected local branch, with start and completion toasts. The checked-out branch uses `git pull`; other branches fast-forward from their configured upstream without switching branches
+- **Remote reachability** — when a pull cannot reach the remote, the failure explains itself: git's diagnostic lines (`fatal:`/`ssh:`/`remote:`) are surfaced instead of its generic "check your access rights" tail, and network git commands get a longer timeout than local ones. When the remote resolves to a private address and macOS is blocking local network access, the toast names the blocked host and offers **Open Settings**, which opens Privacy & Security → Local Network. The probe asks the route's default gateway (`route -n get default`, plus `netstat -rn` for VPN setups) instead of a hardcoded IP, and a refused connection or a timeout is never reported as a permission problem. Desktop only
 - **Searchable dropdowns** — repository and branch pickers are custom dropdowns (no native `<select>`) with type-to-filter, keyboard navigation (↑↓ Enter Esc), grouped branch list (Local/Remote), and current-selection marking; branch search matches both local and remote branch names
 - **File tree search** — a filter box atop the file tree narrows to matching paths (flattened full-path view) as you type
 - **Commit list** — collapsible sidebar (preference remembered), paged 100 at a time with "Load more", server-side search across every local and remote branch (matches subject, author name or email, and SHA — short or full 40-char, any prefix length); results from another branch show its name in both the list and commit details, merge-commit markers, relative timestamps
@@ -181,7 +184,7 @@ Packages are written to `release/`. Unsigned local packages can be used for veri
 - **Root commits** — handled via `git diff-tree --root` / `git show`
 - **Hash routing** — `#r=<repo>&b=<branch>&c=<sha>` is synced as you navigate, so repository, branch, and commit navigation is shareable/bookmarkable
 - **Security** — token authentication on by default (random token per start, printed as a ready URL; `--token` to fix your own, `--no-auth` to opt out); constant-time comparison; repo ids come from a discovery scan, never raw paths; revisions validated as hex; file paths validated as repo-relative; all git calls use argument arrays (no shell); `GIT_OPTIONAL_LOCKS=0` keeps reads from touching the index lock; localhost binding by default
-- **Server status & build version** — the header shows connected/disconnected state using an authenticated 10-second health check plus browser network events; the footer shows the tool's build date, its version (`v0.5.0`), and the source Commit ID, embedded at build time so npm installs do not need the tool's `.git` directory
+- **Server status & build version** — the header shows connected/disconnected state using an authenticated 10-second health check plus browser network events; the footer shows the tool's build date, its version (`v0.5.1`), and the source Commit ID, embedded at build time so npm installs do not need the tool's `.git` directory
 
 ## Architecture
 
@@ -192,6 +195,7 @@ src/
   cli.ts      argument parsing, browser launch
   server.ts   http server, routing, input validation, JSON API
   git.ts      safe argument-array wrappers around the git CLI
+  localnet.ts macOS local-network permission probe, private-address and remote-URL parsing (desktop only)
   diff.ts     unified-diff parser + side-by-side row pairing + word spans
   page.ts     the single-page UI (inline CSS/JS, no build step)
   hljs.ts     vendored highlight.js v11.11.1 (common bundle), inlined into the page
@@ -208,8 +212,10 @@ bin/
 scripts/
   demo.mjs     generates sample repos under /tmp/revision-demo
   build-version.mjs  embeds the version, build date, and tool Commit ID into src/build-info.ts
+  after-pack.mjs  trims the SwiftShader ICD and crashpad handler from the packaged app
+  pack-dmg-lzma.mjs  repacks the macOS DMG as LZMA (ULMO) and rewrites latest-mac.yml
 tests/
-  *.test.mjs  desktop menu/settings/page contracts and server port behavior
+  *.test.mjs  desktop menu/settings/page contracts, local-network detection, and server port behavior
 ```
 
 Data flow:
@@ -219,6 +225,8 @@ page --GET /api/repos----------------> server --fs scan------------> repo list
 page --GET /api/repo/:id/branches----> server --git branch---------> local + remote branches
 page --POST /api/repo/:id/checkout?branch-> server --git checkout------> switch branch / create local tracking branch (clean tree only)
 page --POST /api/repo/:id/pull?branch-> server --git pull/fetch-----> local branch update (non-checked-out branches fast-forward only)
+page --GET /api/localnet?repo=-------> server --connect probe-------> local-network permission verdict (private targets only)
+page --POST .../localnet/open-settings-> desktop --------------------> opens Privacy & Security → Local Network
 page --GET /api/health----------------> server (authenticated liveness check)
 page --GET /api/repo/:id/log?branch--> server --git log------------> commit rows
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> file list + stats

@@ -161,10 +161,13 @@ npm run dist:desktop  # 构建本地安装包，不发布
 
 安装包输出到 `release/`。未签名的本地安装包可用于验证。公开分发时，macOS 需要 Apple 代码签名和公证，Windows 需要代码签名；仓库中不包含签名凭证。Windows 和 Linux 安装包尚未在本机验证。
 
+macOS 构建会把内置语言限制为 `en` 和 `zh_CN`，从应用包中移除 SwiftShader ICD 与 crashpad handler，并在打包完成后把 DMG 重新压缩为 LZMA（ULMO）；`scripts/pack-dmg-lzma.mjs` 随后重写 `latest-mac.yml`，让其中记录的体积和 sha512 与重新打包后的文件一致。
+
 ## 功能
 
 - **仓库发现**——目标目录本身为仓库时会被包含，同时扫描下一层目录；支持 worktree 和 submodule（`.git` 文件或目录），名称冲突时添加后缀，最多 100 个仓库；每次刷新浏览器时重新扫描
 - **分支**——本地分支并预选当前分支；远程分支位于单独的 optgroup 中；可从标头 Checkout 选中的本地或远程分支（远程分支按需创建同名本地分支，并在 remote 已配置时建立 tracking），只要存在已暂存、未暂存或未跟踪变更就会阻止操作；可 Pull 任意选中的本地分支，并显示开始和完成提示。已检出分支使用 `git pull`；其他分支从配置的上游 fast-forward 更新，无需切换分支
+- **远端可达性**——拉取无法连接远端时，失败信息会说明原因：暴露 git 的诊断行（`fatal:`/`ssh:`/`remote:`），而不是它那句笼统的“请确认访问权限”；网络类 git 命令的超时也长于本地命令。若远端解析到私有地址、且 macOS 正在拦截本地网络访问，toast 会点名被拦截的主机并提供 **Open Settings** 按钮，直接打开“隐私与安全性 → 本地网络”。探测走路由的默认网关（`route -n get default`，并用 `netstat -rn` 覆盖 VPN 场景），不写死 IP；连接被拒绝或超时不会被误报为权限问题。仅桌面端
 - **可搜索下拉框**——仓库和分支选择器使用自定义下拉框（非原生 `<select>`），支持输入筛选、键盘导航（↑↓ Enter Esc）、分组分支列表（Local / Remote），以及标记当前选中项；分支搜索会同时匹配本地和远程分支名称
 - **文件树搜索**——文件树顶部的筛选框可实时缩小到匹配路径（显示扁平化完整路径）
 - **Commit 列表**——可折叠侧栏（记住偏好），每页 100 条并提供“Load more”；服务端跨全部本地和远程分支搜索（匹配标题、作者名称或邮箱和 SHA——短 SHA 或完整 40 字符 SHA，支持任意长度前缀）；来自其他分支的结果会在列表和 Commit 详情中标记分支名，并提供合并 Commit 标记、相对时间戳
@@ -181,7 +184,7 @@ npm run dist:desktop  # 构建本地安装包，不发布
 - **根 Commit**——通过 `git diff-tree --root` / `git show` 处理
 - **Hash 路由**——导航时同步 `#r=<repo>&b=<branch>&c=<sha>`，因此仓库、分支和 Commit 导航可分享、可收藏
 - **安全**——默认启用令牌认证（每次启动生成随机令牌，打印可直接使用的 URL；通过 `--token` 固定令牌，`--no-auth` 可关闭）；常量时间比较；仓库 ID 来自发现扫描，绝不使用原始路径；revision 必须是十六进制；文件路径必须是仓库相对路径；所有 Git 调用均使用参数数组（不使用 shell）；`GIT_OPTIONAL_LOCKS=0` 防止读取操作触碰索引锁；默认绑定 localhost
-- **服务状态与构建版本**——标头通过需要认证的 10 秒健康检查和浏览器网络事件显示已连接 / 已断开状态；页脚显示工具构建日期、版本号（`v0.5.0`）和源码 Commit ID，这些信息在构建时嵌入，因此 npm 安装不需要工具的 `.git` 目录
+- **服务状态与构建版本**——标头通过需要认证的 10 秒健康检查和浏览器网络事件显示已连接 / 已断开状态；页脚显示工具构建日期、版本号（`v0.5.1`）和源码 Commit ID，这些信息在构建时嵌入，因此 npm 安装不需要工具的 `.git` 目录
 
 ## 架构
 
@@ -192,6 +195,7 @@ src/
   cli.ts      参数解析、浏览器启动
   server.ts   HTTP 服务器、路由、输入验证、JSON API
   git.ts      使用参数数组安全调用 git CLI
+  localnet.ts 本地网络权限探测、私有地址与远程 URL 解析（仅桌面端）
   diff.ts     unified-diff 解析器 + 并排逐行配对 + 词级 span
   page.ts     单页 UI（内联 CSS/JS，无构建步骤）
   hljs.ts     内置 highlight.js v11.11.1（common bundle），内联到页面
@@ -208,8 +212,10 @@ bin/
 scripts/
   demo.mjs     在 /tmp/revision-demo 下生成示例仓库
   build-version.mjs  将版本号、构建日期和工具 Commit ID 嵌入 src/build-info.ts
+  after-pack.mjs  从应用包中裁掉 SwiftShader ICD 与 crashpad handler
+  pack-dmg-lzma.mjs  将 macOS DMG 重新压缩为 LZMA（ULMO）并重写 latest-mac.yml
 tests/
-  *.test.mjs  桌面菜单 / 设置 / 页面契约和服务器端口行为
+  *.test.mjs  桌面菜单 / 设置 / 页面契约、本地网络探测和服务器端口行为
 ```
 
 数据流：
@@ -219,6 +225,8 @@ page --GET /api/repos----------------> server --fs scan------------> 仓库列�
 page --GET /api/repo/:id/branches----> server --git branch---------> 本地 + 远程分支
 page --POST /api/repo/:id/checkout?branch-> server --git checkout------> 切换分支 / 创建本地 tracking 分支（仅限干净工作区）
 page --POST /api/repo/:id/pull?branch-> server --git pull/fetch-----> 更新本地分支（未检出分支仅支持 fast-forward）
+page --GET /api/localnet?repo=-------> server --connect probe------> 本地网络权限判定（仅私有地址目标）
+page --POST .../localnet/open-settings-> desktop ------------------> 打开“隐私与安全性 → 本地网络”
 page --GET /api/health---------------> server（需要认证的存活检查）
 page --GET /api/repo/:id/log?branch--> server --git log------------> Commit 行
 page --GET /api/repo/:id/commit/:sha-> server --git diff-tree/show-> 文件列表 + 统计
